@@ -6,3 +6,7 @@ MANIFEST
 *.py[cd]
 *.swp
 *.swo
+mitmproxyc
+mitmdumpc
+playbackc
+recordc
