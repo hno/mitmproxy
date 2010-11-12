@@ -317,15 +317,18 @@ class ConnectionView(WWrap):
         self.master.refresh_connection(self.flow)
 
     def set_resp_code(self, code):
-	response = self.flow.response
-	response.code = code
+        response = self.flow.response
+        response.code = code
+        import BaseHTTPServer
+	if BaseHTTPServer.BaseHTTPRequestHandler.responses.has_key(int(code)):
+	    response.msg = BaseHTTPServer.BaseHTTPRequestHandler.responses[int(code)][0]
         self.master.refresh_connection(self.flow)
 
     def set_resp_msg(self, msg):
-	response = self.flow.response
-	response.msg = msg
+        response = self.flow.response
+        response.msg = msg
         self.master.refresh_connection(self.flow)
-	
+        
     def edit(self, part):
         if self.viewing == self.REQ:
             conn = self.flow.request
@@ -349,9 +352,9 @@ class ConnectionView(WWrap):
             self.master.prompt_edit("Message ", conn.msg, self.set_resp_msg)
         elif part == "r" and self.viewing == self.REQ:
             if not conn.acked:
-		response = proxy.Response(conn, "200", "HTTP/1.1", "OK", utils.Headers(), "")
-		conn.ack(response)
-	    self.view_response()
+                response = proxy.Response(conn, "200", "HTTP/1.1", "OK", utils.Headers(), "")
+                conn.ack(response)
+            self.view_response()
         self.master.refresh_connection(self.flow)
 
     def keypress(self, size, key):
@@ -1170,8 +1173,7 @@ class ConsoleMaster(controller.Master):
         if not f:
             r.ack()
         else:
-            self.sync_list_view()
-            self.refresh_connection(f)
+            self.process_flow(f, r)
 
     def handle_request(self, r):
         f = self.state.add_request(r)
