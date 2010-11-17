@@ -94,21 +94,19 @@ def parse_proxy_request(request):
         method, url, protocol = string.split(request)
     except ValueError:
         raise ProxyError(400, "Can't parse request")
-    if method in ['GET', 'HEAD', 'POST']:
-        if url.startswith("/"):
+    if method == 'CONNECT':
+        scheme = None
+        path = None
+        host, port = url.split(":")
+        port = int(port)
+    else:
+        if url.startswith("/") or url == "*":
             scheme, port, host, path = None, None, None, url
         else:
             parts = parse_url(url)
             if not parts:
                 raise ProxyError(400, "Invalid url: %s"%url)
             scheme, host, port, path = parts
-    elif method == 'CONNECT':
-        scheme = None
-        path = None
-        host, port = url.split(":")
-        port = int(port)
-    else:
-        raise ProxyError(501, "Unknown request method: %s" % method)
     return method, scheme, host, port, path
 
 
@@ -160,7 +158,7 @@ class Request(controller.Msg):
         try_del(headers, 'keep-alive')
         try_del(headers, 'connection')
         try_del(headers, 'content-length')
-	try_del(headers, 'transfer-encoding')
+        try_del(headers, 'transfer-encoding')
         if not headers.has_key('host'):
             headers["host"] = [self.hostport()]
         content = self.content
@@ -203,7 +201,7 @@ class Response(controller.Msg):
         try_del(headers, 'proxy-connection')
         try_del(headers, 'connection')
         try_del(headers, 'keep-alive')
-	try_del(headers, 'transfer-encoding')
+        try_del(headers, 'transfer-encoding')
         content = self.content
         if content is not None:
             headers["content-length"] = [str(len(content))]
@@ -300,7 +298,10 @@ class ServerConnection:
         code = int(code)
         headers = utils.Headers()
         headers.read(self.rfile)
-        content = read_http_body(self.rfile, headers, True)
+        if self.request.method == "HEAD":
+            content = None
+        else:
+            content = read_http_body(self.rfile, headers, True)
         return Response(self.request, code, proto, msg, headers, content)
 
     def terminate(self):
@@ -354,8 +355,6 @@ class ProxyHandler(SocketServer.StreamRequestHandler):
     def read_request(self, connection):
         request = self.rfile.readline()
         method, scheme, host, port, path = parse_proxy_request(request)
-        if not host:
-            raise ProxyError(400, 'Invalid request: %s'%request)
         if method == "CONNECT":
             # Discard additional headers sent to the proxy. Should I expose
             # these to users?
@@ -377,14 +376,26 @@ class ProxyHandler(SocketServer.StreamRequestHandler):
             )
             self.rfile = FileLike(self.connection)
             self.wfile = FileLike(self.connection)
-            method, _, _, _, path = parse_proxy_request(self.rfile.readline())
-            scheme = "https"
+            method, scheme, host, port, path = parse_proxy_request(self.rfile.readline())
+	    if scheme is None:
+		scheme = "https"
         headers = utils.Headers()
         headers.read(self.rfile)
+	if host is None and headers.has_key("host"):
+	    netloc = headers["host"][0]
+	    if ':' in netloc:
+		host, port = string.split(netloc, ':')
+		port = int(port)
+	    else:
+		host = netloc
+		if scheme == "https":
+		    port = 443
+		else:
+		    port = 80
+	    port = int(port)
+        if host is None:
+            raise ProxyError(400, 'Invalid request: %s'%request)
         content = read_http_body(self.rfile, headers, False)
-        # Strictly speaking this isn't needed. May just as well forward and see what happens
-        if method == 'POST' and content == None:
-            raise ProxyError(411, "Missing body for POST method")
         return Request(connection, host, port, scheme, method, path, headers, content)
 
     def send_response(self, response):
