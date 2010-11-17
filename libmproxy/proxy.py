@@ -188,7 +188,7 @@ class Request(controller.Msg):
             headers["host"] = [self.hostport()]
         content = self.content
         if content is not None:
-            headers["content-length"] = [length(content)]
+            headers["content-length"] = [len(content)]
         else:
             content = ""
         headers["connection"] = ["close"]
