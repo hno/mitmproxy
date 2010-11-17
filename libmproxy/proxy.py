@@ -26,13 +26,6 @@ class Config:
         self.pemfile = pemfile
 
 
-def try_del(dict, key):
-    try:
-        del dict[key]
-    except KeyError:
-        pass
-
-
 def read_chunked(fp):
     content = ""
     while 1:
@@ -185,12 +178,12 @@ class Request(controller.Msg):
             modifications to make sure interception works properly.
         """
         headers = self.headers.copy()
-        try_del(headers, 'accept-encoding')
-        try_del(headers, 'proxy-connection')
-        try_del(headers, 'keep-alive')
-        try_del(headers, 'connection')
-        try_del(headers, 'content-length')
-        try_del(headers, 'transfer-encoding')
+        utils.try_del(headers, 'accept-encoding')
+        utils.try_del(headers, 'proxy-connection')
+        utils.try_del(headers, 'keep-alive')
+        utils.try_del(headers, 'connection')
+        utils.try_del(headers, 'content-length')
+        utils.try_del(headers, 'transfer-encoding')
         if not headers.has_key('host'):
             headers["host"] = [self.hostport()]
         content = self.content
@@ -254,11 +247,11 @@ class Response(controller.Msg):
             modifications to make sure interception works properly.
         """
         headers = self.headers.copy()
-        try_del(headers, 'accept-encoding')
-        try_del(headers, 'proxy-connection')
-        try_del(headers, 'connection')
-        try_del(headers, 'keep-alive')
-        try_del(headers, 'transfer-encoding')
+        utils.try_del(headers, 'accept-encoding')
+        utils.try_del(headers, 'proxy-connection')
+        utils.try_del(headers, 'connection')
+        utils.try_del(headers, 'keep-alive')
+        utils.try_del(headers, 'transfer-encoding')
         content = self.content
         if content is not None:
             headers["content-length"] = [str(len(content))]
