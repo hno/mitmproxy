@@ -55,6 +55,7 @@ class RecordMaster(controller.Master):
 	    print >> sys.stderr, request.short()
 	    print >> sys.stderr, "<<",
 	    print >> sys.stderr, "ERROR: No matching response: " + path
+	    print >> sys.stderr, req_text
 	    msg.kill = True
 	    msg.ack()
 
