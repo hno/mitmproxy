@@ -51,4 +51,4 @@ class RecordMaster(controller.Master):
         print >> sys.stderr, "<<",
         print >> sys.stderr, msg.short()
         self.store.save_response(msg)
-        msg.ack()
+        msg.ack(self.store.filter_response(msg))

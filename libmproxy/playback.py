@@ -44,7 +44,8 @@ class RecordMaster(controller.Master):
             print >> sys.stderr, ">>",
             print >> sys.stderr, request.short()
             print >> sys.stderr, "<<",
-            print >> sys.stderr, "ERROR: No matching response"
+            print >> sys.stderr, "ERROR: No matching response.",
+            print >> sys.stderr, ",".join(self.store.cookies)
             print >> sys.stderr, request.assemble()
             msg.kill = True
             msg.ack()
@@ -56,4 +57,4 @@ class RecordMaster(controller.Master):
         print >> sys.stderr, request.short()
         print >> sys.stderr, "<<",
         print >> sys.stderr, response.short()
-        msg.ack()
+        msg.ack(self.store.filter_response(msg))
