@@ -1,5 +1,8 @@
 #!/usr/bin/env python
 
+# Copyright (C) 2010  Henrik Nordstrom <henrik@henriknordstrom.net>
+#
+# Based on mitmproxy
 # Copyright (C) 2010  Aldo Cortesi
 # 
 # This program is free software: you can redistribute it and/or modify
