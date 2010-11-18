@@ -38,7 +38,7 @@ class Recorder:
     """
     def __init__(self):
         self.sequence = Count()
-	self.cookies = {}
+        self.cookies = {}
 
     def filter_request(self, request):
         """
@@ -56,27 +56,30 @@ class Recorder:
         """
         request = self.filter_request(request)
         headers = request.headers
-	m = hashlib.sha224()
-	m.update(request.method)
-	m.update(" ")
-	m.update(request.url())
-	m.update(" ")
-	if headers.has_key("cookie"):
-	    cookies = Cookie.SimpleCookie("; ".join(headers["cookie"]))
-	    del headers["cookie"]
-	    for key, morsel in cookies.iteritems():
-		if self.cookies.has_key(key):
-		    m.update(key)
-		    m.update("=")
-		    m.update(morsel.value)
-		    m.update(" ")
+        id = request.method + " " + request.url() + " ";
+        if headers.has_key("cookie"):
+            cookies = Cookie.SimpleCookie("; ".join(headers["cookie"]))
+            del headers["cookie"]
+            for key, morsel in cookies.iteritems():
+                if self.cookies.has_key(key):
+                    id = id + key + "=" + morsel.value + " "
+        print >> sys.stderr, "ID: " + id
+        m = hashlib.sha224(id)
         req_text = request.assemble()
-	m.update(req_text)
+        m.update(req_text)
         m = m.hexdigest()
         path = (request.host + request.path)[:80].translate(string.maketrans(":/?","__."))+"."+m
         n = self.sequence.getnext(path)
         path = path + "." + str(n)
+        print >> sys.stderr, "PATH: " + path
         return path
+
+    def filter_response(self, response):
+        if response.headers.has_key('set-cookie'):
+            for header in response.headers['set-cookie']:
+                key = header.split('=',1)[0]
+                self.cookies[key] = True
+        return response
 
     def save_response(self, response):
         """
@@ -93,11 +96,6 @@ class Recorder:
         f = open(path+".resp", 'w')
         f.write(resp_text)
         f.close()
-
-	if response.headers.has_key('set-cookie'):
-	    for header in response.headers['set-cookie']:
-		key = header.split('=',1)[0]
-		self.cookies[key] = True
 
     def get_response(self, request):
         """
