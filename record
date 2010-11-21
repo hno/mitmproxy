@@ -18,7 +18,7 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-import sys, os.path
+import sys, os.path, os
 from libmproxy import proxy, controller, record, utils
 from optparse import OptionParser, OptionGroup
 
@@ -41,8 +41,26 @@ if __name__ == '__main__':
         help = "Port."
     )
 
+    parser.add_option(
+        "-s", "--store", action="store",
+        type = "str", dest="cache", default="cache/",
+        help = "Request store location"
+    )
+
+    parser.add_option("-q", "--quiet",
+                      action="store_true", dest="quiet",
+                      help="Quiet.")
+    parser.add_option("-v", "--verbose",
+                      action="count", dest="verbose", default=1,
+                      help="Increase verbosity. Can be passed multiple times.")
+
     options, args = parser.parse_args()
+
+    if options.quiet:
+        options.verbose = 0
+
     certpath = os.path.expanduser(options.cert)
+    options.cache = os.path.expanduser(options.cache)
     
     if not os.path.exists(certpath):
         print >> sys.stderr, "Creating bogus certificate at %s"%options.cert
@@ -52,5 +70,6 @@ if __name__ == '__main__':
         certpath
     )
     server = proxy.ProxyServer(options.port)
+    os.makedirs(options.cache)
     m = record.RecordMaster(server, options)
     m.run()
