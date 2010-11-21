@@ -25,9 +25,8 @@ class RecordMaster(controller.Master):
     """
         A simple master that just records to files.
     """
-    def __init__(self, server, verbosity):
-        self.store = recorder.Recorder()
-        self.verbosity = verbosity
+    def __init__(self, server, options):
+        self.store = recorder.Recorder(options)
         controller.Master.__init__(self, server)
 
     def run(self):
@@ -41,20 +40,22 @@ class RecordMaster(controller.Master):
         try:
             msg.ack(self.store.get_response(request))
         except IOError:
-            print >> sys.stderr, ">>",
-            print >> sys.stderr, request.short()
-            print >> sys.stderr, "<<",
-            print >> sys.stderr, "ERROR: No matching response.",
-            print >> sys.stderr, ",".join(self.store.cookies)
-            print >> sys.stderr, request.assemble()
+            if self.verbosity > 0:
+                print >> sys.stderr, ">>",
+                print >> sys.stderr, request.short()
+                print >> sys.stderr, "<<",
+                print >> sys.stderr, "ERROR: No matching response.",
+                print >> sys.stderr, ",".join(self.store.cookies)
+                print >> sys.stderr, request.assemble()
             msg.kill = True
             msg.ack()
 
     def handle_response(self, msg):
         request = msg.request
         response = msg
-        print >> sys.stderr, ">>",
-        print >> sys.stderr, request.short()
-        print >> sys.stderr, "<<",
-        print >> sys.stderr, response.short()
+        if self.verbosity > 0:
+            print >> sys.stderr, ">>",
+            print >> sys.stderr, request.short()
+            print >> sys.stderr, "<<",
+            print >> sys.stderr, response.short()
         msg.ack(self.store.filter_response(msg))

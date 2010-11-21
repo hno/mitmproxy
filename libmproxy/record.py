@@ -31,9 +31,8 @@ class RecordMaster(controller.Master):
     """
         A simple master that just records to files.
     """
-    def __init__(self, server, verbosity):
-        self.store = recorder.Recorder()
-        self.verbosity = verbosity
+    def __init__(self, server, options):
+        self.store = recorder.Recorder(options)
         controller.Master.__init__(self, server)
 
     def run(self):
@@ -46,9 +45,10 @@ class RecordMaster(controller.Master):
         msg.ack(self.store.filter_request(msg))
 
     def handle_response(self, msg):
-        print >> sys.stderr, ">>",
-        print >> sys.stderr, msg.request.short()
-        print >> sys.stderr, "<<",
-        print >> sys.stderr, msg.short()
+        if self.verbosity > 0:
+            print >> sys.stderr, ">>",
+            print >> sys.stderr, msg.request.short()
+            print >> sys.stderr, "<<",
+            print >> sys.stderr, msg.short()
         self.store.save_response(msg)
         msg.ack(self.store.filter_response(msg))
