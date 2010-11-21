@@ -7,3 +7,6 @@ MANIFEST
 *.swp
 *.swo
 mitmproxyc
+mitmdumpc
+playbackc
+recordc
