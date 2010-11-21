@@ -32,6 +32,7 @@ class RecordMaster(controller.Master):
         A simple master that just records to files.
     """
     def __init__(self, server, options):
+        self.verbosity = options.verbose
         self.store = recorder.Recorder(options)
         controller.Master.__init__(self, server)
 
