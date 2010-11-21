@@ -16,6 +16,7 @@
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 import sys
+import time
 import hashlib
 import utils
 import recorder
@@ -36,9 +37,12 @@ class Recorder:
     """
         A simple record/playback cache
     """
-    def __init__(self):
+    def __init__(self, options):
         self.sequence = Count()
         self.cookies = {}
+        self.verbosity = options.verbose
+        self.storedir = options.cache
+        self.indexfp = None
 
     def filter_request(self, request):
         """
@@ -49,6 +53,9 @@ class Recorder:
         utils.try_del(headers, 'if-modified-since')
         utils.try_del(headers, 'if-none-match')
         return request;
+
+    def open(self, path, mode):
+        return open(self.storedir + "/" + path, mode)
 
     def path(self, request):
         """
@@ -63,7 +70,8 @@ class Recorder:
             for key, morsel in cookies.iteritems():
                 if self.cookies.has_key(key):
                     id = id + key + "=" + morsel.value + " "
-        print >> sys.stderr, "ID: " + id
+        if self.verbosity > 1:
+            print >> sys.stderr, "ID: " + id
         m = hashlib.sha224(id)
         req_text = request.assemble()
         m.update(req_text)
@@ -71,7 +79,8 @@ class Recorder:
         path = (request.host + request.path)[:80].translate(string.maketrans(":/?","__."))+"."+m
         n = self.sequence.getnext(path)
         path = path + "." + str(n)
-        print >> sys.stderr, "PATH: " + path
+        if self.verbosity > 1:
+            print >> sys.stderr, "PATH: " + path
         return path
 
     def filter_response(self, response):
@@ -90,19 +99,27 @@ class Recorder:
         resp_text = response.assemble()
         path = self.path(request)
 
-        f = open(path+".req", 'w')
+        f = self.open(path+".req", 'w')
         f.write(req_text)
         f.close()
-        f = open(path+".resp", 'w')
+        f = self.open(path+".resp", 'w')
         f.write(resp_text)
         f.close()
+        if self.indexfp is None:
+            self.indexfp = self.open("index.txt", "w")
+        print >> self.indexfp , time.time(), request.method, request.path
+        if request.headers.has_key('referer'):
+            print >> self.indexfd , 'referer:', ','.join(request.headers[referer])
+        print >> self.indexfp , path
+        print >> self.indexfp , ""
+
 
     def get_response(self, request):
         """
             Retrieve previously saved response saved by save_response
         """
         path = self.path(request)
-        fp = open(path+".resp", 'r')
+        fp = self.open(path+".resp", 'r')
         proto, code, status = fp.readline().strip().split(" ", 2)
         code = int(code)
         headers = utils.Headers()

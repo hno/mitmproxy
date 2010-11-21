@@ -41,8 +41,26 @@ if __name__ == '__main__':
         help = "Port."
     )
 
+    parser.add_option(
+        "-s", "--store", action="store",
+        type = "str", dest="store", default="cache/",
+        help = "Cache store location"
+    )
+
+    parser.add_option("-q", "--quiet",
+                      action="store_true", dest="quiet",
+                      help="Quiet.")
+    parser.add_option("-v", "--verbose",
+                      action="count", dest="verbose", default=1,
+                      help="Increase verbosity. Can be passed multiple times.")
+
     options, args = parser.parse_args()
+
+    if options.quiet:
+        options.verbose = 0
+
     certpath = os.path.expanduser(options.cert)
+    options.cache = os.path.expanduser(options.cache)
     
     if not os.path.exists(certpath):
         print >> sys.stderr, "Creating bogus certificate at %s"%options.cert
