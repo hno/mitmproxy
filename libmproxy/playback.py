@@ -56,20 +56,40 @@ class RecordMaster(controller.Master):
         except KeyboardInterrupt:
             self.shutdown()
 
+    def process_missing_response(self, request):
+	response = None
+	print >> sys.stderr, request.assemble()
+	print >> sys.stderr, "Actions:"
+	print >> sys.stderr, "  q  Quit"
+	print >> sys.stderr, "  u(rl)           search-replace on the URL"
+	print >> sys.stderr, "  c(ookie)        search-replace in cookies"
+	print >> sys.stderr, "  h(header)       search-replace in whole request header"
+	print >> sys.stderr, "  s(static)       mark URL as static, returning previous response"
+	print >> sys.stderr, "  e(rror)         respond with a 404 error"
+	print >> sys.stderr, "  k(ill)          kill the request, empty response"
+	print >> sys.stderr, "  Use capital letters (C, H) to apply the command on every following request, not just this URL"
+	command = raw_input("Action: ")
+	if command.startswith('q'):
+	    self.shutdown()
+	if response is not None:
+	    return response
+	else:
+	    request.kill = True
+	    return request
+
     def handle_request(self, msg):
         request = msg
         try:
-            msg.ack(self.store.get_response(request))
+	    response = self.store.get_response(request)
         except IOError:
             if self.verbosity > 0:
                 print >> sys.stderr, ">>",
                 print >> sys.stderr, request.short()
                 print >> sys.stderr, "<<",
-                print >> sys.stderr, "ERROR: No matching response.",
-                print >> sys.stderr, ",".join(self.store.cookies)
-                print >> sys.stderr, request.assemble()
-            msg.kill = True
-            msg.ack()
+	    print >> sys.stderr, "ERROR: No matching response.",
+	    print >> sys.stderr, ",".join(self.store.cookies)
+	    response = self.process_missing_response(msg)
+	msg.ack(response)
 
     def handle_response(self, msg):
         request = msg.request
