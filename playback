@@ -43,7 +43,7 @@ if __name__ == '__main__':
 
     parser.add_option(
         "-s", "--store", action="store",
-        type = "str", dest="store", default="cache/",
+        type = "str", dest="cache", default="cache/",
         help = "Cache store location"
     )
 
