@@ -78,7 +78,7 @@ def parse_url(url):
     return scheme, host, port, path
 
 
-def parse_proxy_request(request):
+def parse_request_line(request):
     """
         Parse a proxy request line. Return (method, scheme, host, port, path).
         Raise ProxyError on error.
@@ -90,7 +90,10 @@ def parse_proxy_request(request):
     if method == 'CONNECT':
         scheme = None
         path = None
-        host, port = url.split(":")
+        try:
+            host, port = url.split(":")
+        except ValueError:
+            raise ProxyError(400, "Can't parse request")
         port = int(port)
     else:
         if url.startswith("/") or url == "*":
@@ -100,7 +103,14 @@ def parse_proxy_request(request):
             if not parts:
                 raise ProxyError(400, "Invalid url: %s"%url)
             scheme, host, port, path = parts
-    return method, scheme, host, port, path
+    if not protocol.startswith("HTTP/"):
+        raise ProxyError(400, "Unsupported protocol")
+    major,minor = protocol.split('/')[1].split('.')
+    major = int(major)
+    minor = int(minor)
+    if major != 1:
+        raise ProxyError(400, "Unsupported protocol")
+    return method, scheme, host, port, path, minor
 
 
 class Request(controller.Msg):
@@ -291,7 +301,9 @@ class ServerConnection:
         code = int(code)
         headers = utils.Headers()
         headers.read(self.rfile)
-        if self.request.method == "HEAD":
+        if code >= 100 and code <= 199:
+            return self.read_response()
+        if self.request.method == "HEAD" or code == 204 or code == 304:
             content = None
         else:
             content = read_http_body(self.rfile, headers, True)
@@ -347,7 +359,7 @@ class ProxyHandler(SocketServer.StreamRequestHandler):
 
     def read_request(self, connection):
         request = self.rfile.readline()
-        method, scheme, host, port, path = parse_proxy_request(request)
+        method, scheme, host, port, path, httpminor = parse_request_line(request)
         if method == "CONNECT":
             # Discard additional headers sent to the proxy. Should I expose
             # these to users?
@@ -369,25 +381,34 @@ class ProxyHandler(SocketServer.StreamRequestHandler):
             )
             self.rfile = FileLike(self.connection)
             self.wfile = FileLike(self.connection)
-            method, scheme, host, port, path = parse_proxy_request(self.rfile.readline())
-	    if scheme is None:
-		scheme = "https"
+            method, scheme, host, port, path, httpminor = parse_request_line(self.rfile.readline())
+            if scheme is None:
+                scheme = "https"
         headers = utils.Headers()
         headers.read(self.rfile)
-	if host is None and headers.has_key("host"):
-	    netloc = headers["host"][0]
-	    if ':' in netloc:
-		host, port = string.split(netloc, ':')
-		port = int(port)
-	    else:
-		host = netloc
-		if scheme == "https":
-		    port = 443
-		else:
-		    port = 80
-	    port = int(port)
+        if host is None and headers.has_key("host"):
+            netloc = headers["host"][0]
+            if ':' in netloc:
+                host, port = string.split(netloc, ':')
+                port = int(port)
+            else:
+                host = netloc
+                if scheme == "https":
+                    port = 443
+                else:
+                    port = 80
+            port = int(port)
         if host is None:
             raise ProxyError(400, 'Invalid request: %s'%request)
+        if headers.has_key('expect'):
+            expect = ",".join(headers['expect'])
+            if expect == "100-continue" and httpminor >= 1:
+                self.wfile.write('HTTP/1.1 100 Continue\r\n')
+                self.wfile.write('Proxy-agent: %s\r\n'%NAME)
+                self.wfile.write('\r\n')
+                del headers['expect']
+            else:
+                raise ProxyError(417, 'Unmet expect: %s'%expect)
         content = read_http_body(self.rfile, headers, False)
         return Request(connection, host, port, scheme, method, path, headers, content)
 
