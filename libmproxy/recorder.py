@@ -42,27 +42,48 @@ import utils
 import recorder
 import proxy
 import collections
+import itertools
 import string
 import Cookie
 
-class Count(collections.defaultdict):
-    def __init__(self):
-        collections.defaultdict.__init__(self, int)
-
-    def getnext(self,key):
-        self[key] = self[key] + 1
-        return self[key]
+def constant_factory(value):
+    return itertools.repeat(value).next
 
 class Recorder:
     """
         A simple record/playback cache
     """
     def __init__(self, options):
-        self.sequence = Count()
+        self.static = collections.defaultdict(constant_factory(False))
+        self.sequence = collections.defaultdict(int)
         self.cookies = {}
+        try:
+            for cookie in options.cookies:
+                self.cookies[cookie] = True
+        except AttributeError: pass
         self.verbosity = options.verbose
         self.storedir = options.cache
         self.indexfp = None
+        self.load_config("default")
+
+    def load_config(self, name):
+        """
+            Load configuration settings from name
+        """
+        try:
+            file = name + ".cfg"
+            if self.verbosity > 2:
+                print >> sys.stderr, "config: " + file
+            fp = self.open(file, "r")
+        except IOError:
+            return
+        for line in fp:
+            directive, value = line.strip().split(" ", 1)
+            if directive == "Cookie:":
+                self.cookies[value] = True
+            if directive == "Static:":
+                self.static[value] = True
+        fp.close()
 
     def filter_request(self, request):
         """
@@ -72,18 +93,35 @@ class Recorder:
         headers = request.headers
         utils.try_del(headers, 'if-modified-since')
         utils.try_del(headers, 'if-none-match')
-        return request;
+        return request
+
+    def normalize_request(self, request):
+        """
+            Filter request to simplify storage matching
+        """
+        return request
 
     def open(self, path, mode):
         return open(self.storedir + "/" + path, mode)
 
-    def path(self, request):
+    def pathn(self, request):
         """
-            Create cache file name
+            Create cache file name and sequence number
         """
         request = self.filter_request(request)
+        request = self.normalize_request(request)
         headers = request.headers
-        id = request.method + " " + request.url() + " ";
+	urlkey = (request.host + request.path.split('?',1)[0])[:80].translate(string.maketrans(":/?","__."))
+        self.load_config(urlkey)
+        if self.static[urlkey]:
+	    return urlkey, self.sequence[urlkey]
+        urlkey = (request.host + request.path)[:80].translate(string.maketrans(":/?","__."))
+        self.load_config(urlkey)
+        if self.static[urlkey]:
+	    return urlkey, self.sequence[urlkey]
+        id = request.method + " " + request.url() + " "
+        m = hashlib.sha224(id)
+        self.load_config(urlkey+"."+m.hexdigest())
         if headers.has_key("cookie"):
             cookies = Cookie.SimpleCookie("; ".join(headers["cookie"]))
             del headers["cookie"]
@@ -93,15 +131,20 @@ class Recorder:
         if self.verbosity > 1:
             print >> sys.stderr, "ID: " + id
         m = hashlib.sha224(id)
+        path = urlkey+"."+m.hexdigest()
+        self.load_config(path)
+        if self.static[path]:
+	    return path, self.sequence[path]
         req_text = request.assemble()
         m.update(req_text)
-        m = m.hexdigest()
-        path = (request.host + request.path)[:80].translate(string.maketrans(":/?","__."))+"."+m
-        n = self.sequence.getnext(path)
-        path = path + "." + str(n)
+        path = urlkey+"."+m.hexdigest()
+        self.load_config(path)
+	n = self.sequence[path]
+        n = str(n)
+        self.load_config(path+"."+n)
         if self.verbosity > 1:
-            print >> sys.stderr, "PATH: " + path
-        return path
+            print >> sys.stderr, "PATH: " + path + "." + n
+        return path, n
 
     def filter_response(self, response):
         if response.headers.has_key('set-cookie'):
@@ -114,22 +157,34 @@ class Recorder:
         """
             Save response for later playback
         """
-        request = response.request;
+
+        if self.indexfp is None:
+            self.indexfp = self.open("index.txt", "wa")
+	    try:
+		cfg = self.open("default.cfg", "r")
+	    except:
+		cfg = self.open("default.cfg", "w")
+		for cookie in iter(self.cookies):
+		    print >> cfg, "Cookie: " + cookie
+            cfg.close()
+        request = response.request
         req_text = request.assemble()
         resp_text = response.assemble()
-        path = self.path(request)
+        path, n = self.pathn(request)
+	self.sequence[path] += 1
 
-        f = self.open(path+".req", 'w')
+        f = self.open(path+"."+n+".req", 'w')
         f.write(req_text)
         f.close()
-        f = self.open(path+".resp", 'w')
+        f = self.open(path+"."+n+".resp", 'w')
         f.write(resp_text)
         f.close()
-        if self.indexfp is None:
-            self.indexfp = self.open("index.txt", "w")
+
         print >> self.indexfp , time.time(), request.method, request.path
         if request.headers.has_key('referer'):
-            print >> self.indexfd , 'referer:', ','.join(request.headers[referer])
+            print >> self.indexfp, 'referer:', ','.join(request.headers[referer])
+        if len(self.cookies) > 0:
+            print >> self.indexfp, 'cookies:', ','.join(self.cookies)
         print >> self.indexfp , path
         print >> self.indexfp , ""
 
@@ -138,8 +193,11 @@ class Recorder:
         """
             Retrieve previously saved response saved by save_response
         """
-        path = self.path(request)
-        fp = self.open(path+".resp", 'r')
+        path, n = self.pathn(request)
+	fp = self.open(path+"."+n+".resp", 'r')
+	if not self.static[path]:
+	    if not self.static[path+"."+n]:
+		self.sequence[path]+=1
         proto, code, status = fp.readline().strip().split(" ", 2)
         code = int(code)
         headers = utils.Headers()
@@ -150,4 +208,6 @@ class Recorder:
         else:
             content = proxy.read_http_body(fp, headers, True)
         fp.close()
-        return proxy.Response(request, code, proto, status, headers, content)
+        response = proxy.Response(request, code, proto, status, headers, content)
+	response.cached = True
+	return response

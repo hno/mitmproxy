@@ -122,6 +122,9 @@ class Request(controller.Msg):
         self.kill = False
         controller.Msg.__init__(self)
 
+    def is_cached(self):
+	return False
+
     def copy(self):
         c = copy.copy(self)
         c.headers = self.headers.copy()
@@ -181,6 +184,7 @@ class Response(controller.Msg):
         self.code, self.proto, self.msg = code, proto, msg
         self.headers, self.content = headers, content
         self.kill = False
+	self.cached = False
         controller.Msg.__init__(self)
 
     def copy(self):
@@ -190,6 +194,9 @@ class Response(controller.Msg):
 
     def is_response(self):
         return True
+
+    def is_cached(self):
+	return self.cached
 
     def short(self):
         return "%s %s"%(self.code, self.proto)
