@@ -55,6 +55,12 @@ if __name__ == '__main__':
         help = "Request store location"
     )
 
+    parser.add_option(
+        "-C", "--cookies", action="append",
+        type = "str", dest="cookies", default=[],
+        help = "Persistent client cookies already set or generated in client"
+    )
+
     parser.add_option("-q", "--quiet",
                       action="store_true", dest="quiet",
                       help="Quiet.")
