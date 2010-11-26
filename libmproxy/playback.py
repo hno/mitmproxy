@@ -68,7 +68,7 @@ class RecordMaster(controller.Master):
         print >> sys.stderr, "  e(rror)         respond with a 404 error"
         print >> sys.stderr, "  k(ill)          kill the request, empty response"
         print >> sys.stderr, "  f(orward)       forward the request to the requested server and cache response"
-        print >> sys.stderr, "  Use capital letters (C, H) to apply the command on every following request, not just this URL"
+        #print >> sys.stderr, "  Use capital letters (C, H) to apply the command on every following request, not just this URL"
         command = raw_input("Action: ")
         command = command[:1]
         do_global = command.isupper()
@@ -81,17 +81,18 @@ class RecordMaster(controller.Master):
             replace = raw_input("Replacement: ")
             print >> sys.stderr, "NOTICE: Not yet implemented"
         elif command == 's':
+            #recorder.make_previous_static(request)
             print >> sys.stderr, "NOTICE: Not yet implemented"
             pass
         elif command == 'k':
             request.kill = True
-	elif command == 'f':
-	    return request
+        elif command == 'f':
+            return request
         else:
             print >> sys.stderr, "ERROR: Unknown command"
             return self.process_missing_response(request)
-	if request.kill:
-	    return request
+        if request.kill:
+            return request
         try:
             response = self.store.get_response(request)
         except IOError:
@@ -121,6 +122,6 @@ class RecordMaster(controller.Master):
             print >> sys.stderr, request.short()
             print >> sys.stderr, "<<",
             print >> sys.stderr, response.short()
-	if not response.is_cached():
-	    self.store.save_response(response)
+        if not response.is_cached():
+            self.store.save_response(response)
         msg.ack(self.store.filter_response(msg))
