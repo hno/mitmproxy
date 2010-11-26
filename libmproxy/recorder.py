@@ -76,7 +76,7 @@ class Recorder:
                 print >> sys.stderr, "config: " + file
             fp = self.open(file, "r")
         except IOError:
-            return
+            return False
         for line in fp:
             directive, value = line.strip().split(" ", 1)
             if directive == "Cookie:":
@@ -84,6 +84,7 @@ class Recorder:
             if directive == "Static:":
                 self.static[value] = True
         fp.close()
+        return True
 
     def filter_request(self, request):
         """
@@ -104,24 +105,27 @@ class Recorder:
     def open(self, path, mode):
         return open(self.storedir + "/" + path, mode)
 
-    def pathn(self, request):
+    def pathn(self, _request):
         """
             Create cache file name and sequence number
         """
         request = self.filter_request(request)
-        request = self.normalize_request(request)
+        request = self.normalize_request(_request)
         headers = request.headers
-	urlkey = (request.host + request.path.split('?',1)[0])[:80].translate(string.maketrans(":/?","__."))
-        self.load_config(urlkey)
+        urlkey = (request.host + request.path.split('?',1)[0])[:80].translate(string.maketrans(":/?","__."))
+        if self.load_config(urlkey):
+            request = self.normalize_request(_request)
         if self.static[urlkey]:
-	    return urlkey, self.sequence[urlkey]
+            return urlkey, self.sequence[urlkey]
         urlkey = (request.host + request.path)[:80].translate(string.maketrans(":/?","__."))
-        self.load_config(urlkey)
+        if self.load_config(urlkey):
+            request = self.normalize_request(_request)
         if self.static[urlkey]:
-	    return urlkey, self.sequence[urlkey]
+            return urlkey, self.sequence[urlkey]
         id = request.method + " " + request.url() + " "
         m = hashlib.sha224(id)
-        self.load_config(urlkey+"."+m.hexdigest())
+        if self.load_config(urlkey+"."+m.hexdigest()):
+            request = self.normalize_request(_request)
         if headers.has_key("cookie"):
             cookies = Cookie.SimpleCookie("; ".join(headers["cookie"]))
             del headers["cookie"]
@@ -132,16 +136,19 @@ class Recorder:
             print >> sys.stderr, "ID: " + id
         m = hashlib.sha224(id)
         path = urlkey+"."+m.hexdigest()
-        self.load_config(path)
+        if self.load_config(path):
+            request = self.normalize_request(_request)
         if self.static[path]:
-	    return path, self.sequence[path]
+            return path, self.sequence[path]
         req_text = request.assemble()
         m.update(req_text)
         path = urlkey+"."+m.hexdigest()
-        self.load_config(path)
-	n = self.sequence[path]
+        if self.load_config(path):
+            request = self.normalize_request(_request)
+        n = self.sequence[path]
         n = str(n)
-        self.load_config(path+"."+n)
+        if self.load_config(path+"."+n):
+            request = self.normalize_request(_request)
         if self.verbosity > 1:
             print >> sys.stderr, "PATH: " + path + "." + n
         return path, n
@@ -153,6 +160,7 @@ class Recorder:
                 self.cookies[key] = True
         return response
 
+    def ma
     def save_response(self, response):
         """
             Save response for later playback
@@ -160,18 +168,18 @@ class Recorder:
 
         if self.indexfp is None:
             self.indexfp = self.open("index.txt", "wa")
-	    try:
-		cfg = self.open("default.cfg", "r")
-	    except:
-		cfg = self.open("default.cfg", "w")
-		for cookie in iter(self.cookies):
-		    print >> cfg, "Cookie: " + cookie
+            try:
+                cfg = self.open("default.cfg", "r")
+            except:
+                cfg = self.open("default.cfg", "w")
+                for cookie in iter(self.cookies):
+                    print >> cfg, "Cookie: " + cookie
             cfg.close()
         request = response.request
         req_text = request.assemble()
         resp_text = response.assemble()
         path, n = self.pathn(request)
-	self.sequence[path] += 1
+        self.sequence[path] += 1
 
         f = self.open(path+"."+n+".req", 'w')
         f.write(req_text)
@@ -194,10 +202,10 @@ class Recorder:
             Retrieve previously saved response saved by save_response
         """
         path, n = self.pathn(request)
-	fp = self.open(path+"."+n+".resp", 'r')
-	if not self.static[path]:
-	    if not self.static[path+"."+n]:
-		self.sequence[path]+=1
+        fp = self.open(path+"."+n+".resp", 'r')
+        if not self.static[path]:
+            if not self.static[path+"."+n]:
+                self.sequence[path]+=1
         proto, code, status = fp.readline().strip().split(" ", 2)
         code = int(code)
         headers = utils.Headers()
@@ -209,5 +217,5 @@ class Recorder:
             content = proxy.read_http_body(fp, headers, True)
         fp.close()
         response = proxy.Response(request, code, proto, status, headers, content)
-	response.cached = True
-	return response
+        response.cached = True
+        return response
