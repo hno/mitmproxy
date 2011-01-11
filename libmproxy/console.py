@@ -19,6 +19,7 @@ import cStringIO
 import urwid.curses_display
 import urwid
 import controller, utils, filt, proxy
+import recorder
 
 
 class Stop(Exception): pass
@@ -640,6 +641,8 @@ class State:
         return f
 
     def add_response(self, resp):
+	if self.store is not None:
+	    self.store.save_response(msg)
         f = self.flow_map.get(resp.request.connection)
         if not f:
             return False
@@ -814,6 +817,9 @@ class ConsoleMaster(controller.Master):
 
         self.stickycookie = None
         self.stickyhosts = {}
+
+	if options.store is not None:
+	    self.store = recorder.Recorder(options)
 
     def set_palette(self):
         self.palette = [
