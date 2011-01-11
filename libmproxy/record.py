@@ -40,13 +40,6 @@ import controller
 import utils
 import recorder
 
-class Count(dict):
-    def __init__(self):
-        dict.__init__(self)
-
-    def __missing__(self, key):
-        return 0
-
 class RecordMaster(controller.Master):
     """
         A simple master that just records to files.
