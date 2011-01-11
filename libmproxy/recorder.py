@@ -39,15 +39,33 @@ import sys
 import time
 import hashlib
 import utils
-import recorder
 import proxy
 import collections
 import itertools
 import string
 import Cookie
+import filt
+import re
+import cStringIO
 
 def constant_factory(value):
     return itertools.repeat(value).next
+
+class PatternRule:
+    """
+	Request pattern rule
+	:_ivar	_match		filt pattern rule
+	:_ivar	_search		Regex pattern to search for
+	:_ivar	_replace	Replacement string
+    """
+    def __init__(self, pattern, search, replace):
+        self.match = filt.parse(pattern)
+	self.search = re.compile(search)
+	self.replace = replace
+    def execute(self, request, text):
+	if self.match and not self.match(request):
+	    return text
+	return re.sub(self.search, self.replace, text)
 
 class Recorder:
     """
@@ -62,8 +80,26 @@ class Recorder:
         except AttributeError: pass
         self.verbosity = options.verbose
         self.storedir = options.cache
+	self.patterns = []
         self.indexfp = None
-        self.load_config("default")
+        self.reset_config()
+
+    def reset_config(self):
+	self.patterns = []
+	self.load_config("default")
+
+    def add_rule(self, match, search, replace):
+	self.patterns.append(PatternRule(match, search, replace))
+
+    def forget_last_rule(self):
+	self.patterns.pop()
+
+    def save_rule(self, match, search, replace, configfile = "default"):
+	fp = self.open(configfile + ".cfg", "a")
+	print >> fp, "Condition: " + match
+	print >> fp, "Search: " + search
+	print >> fp, "Replace: " + replace
+	fp.close()
 
     def load_config(self, name):
         """
@@ -77,9 +113,16 @@ class Recorder:
         except IOError:
             return False
         for line in fp:
-            directive, value = line.strip().split(" ", 1)
+            directive, value = line.split(" ", 1)
+	    value = value.strip("\r\n")
             if directive == "Cookie:":
                 self.cookies[value] = True
+	    if directive == "Condition:":
+		match = value
+	    if directive == "Search:":
+		search = value
+	    if directive == "Replace:":
+		self.add_rule(match, search, value)
         fp.close()
         return True
 
@@ -97,17 +140,32 @@ class Recorder:
         """
             Filter request to simplify storage matching
         """
-        return request
+	req_text = request.assemble_proxy()
+	orig_req_text = req_text
+       	for pattern in self.patterns:
+	    req_text = pattern.execute(request, req_text)
+	if req_text == orig_req_text:
+	    return request
+	fp = cStringIO.StringIO(req_text)
+	request_line = fp.readline()
+	method, scheme, host, port, path, httpminor = proxy.parse_request_line(request_line)
+	headers = utils.Headers()
+	headers.read(fp)
+	if request.content is None:
+	    content = None
+	else:
+	    content = fp.read()
+        return proxy.Request(request.connection, host, port, scheme, method, path, headers, content)
 
     def open(self, path, mode):
         return open(self.storedir + "/" + path, mode)
 
-    def pathn(self, _request):
+    def pathn(self, request):
         """
             Create cache file name and sequence number
         """
+        request = self.normalize_request(request)
         request = self.filter_request(request)
-        request = self.normalize_request(_request)
         headers = request.headers
         urlkey = (request.host + request.path)[:80].translate(string.maketrans(":/?","__."))
         id = request.method + " " + request.url() + " "
@@ -120,7 +178,7 @@ class Recorder:
         if self.verbosity > 1:
             print >> sys.stderr, "ID: " + id
         m = hashlib.sha224(id)
-        req_text = request.assemble()
+        req_text = request.assemble_proxy()
         m.update(req_text)
         path = urlkey+"."+m.hexdigest()
         n = str(self.sequence[path])
@@ -141,7 +199,7 @@ class Recorder:
         """
 
         if self.indexfp is None:
-            self.indexfp = self.open("index.txt", "wa")
+            self.indexfp = self.open("index.txt", "a")
             try:
                 cfg = self.open("default.cfg", "r")
             except:
@@ -150,7 +208,7 @@ class Recorder:
                     print >> cfg, "Cookie: " + cookie
             cfg.close()
         request = response.request
-        req_text = request.assemble()
+        req_text = request.assemble_proxy()
         resp_text = response.assemble()
         path, n = self.pathn(request)
         self.sequence[path] += 1
