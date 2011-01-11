@@ -54,7 +54,6 @@ class Recorder:
         A simple record/playback cache
     """
     def __init__(self, options):
-        self.static = collections.defaultdict(constant_factory(False))
         self.sequence = collections.defaultdict(int)
         self.cookies = {}
         try:
@@ -81,8 +80,6 @@ class Recorder:
             directive, value = line.strip().split(" ", 1)
             if directive == "Cookie:":
                 self.cookies[value] = True
-            if directive == "Static:":
-                self.static[value] = True
         fp.close()
         return True
 
@@ -112,20 +109,8 @@ class Recorder:
         request = self.filter_request(request)
         request = self.normalize_request(_request)
         headers = request.headers
-        urlkey = (request.host + request.path.split('?',1)[0])[:80].translate(string.maketrans(":/?","__."))
-        if self.load_config(urlkey):
-            request = self.normalize_request(_request)
-        if self.static[urlkey]:
-            return urlkey, self.sequence[urlkey]
         urlkey = (request.host + request.path)[:80].translate(string.maketrans(":/?","__."))
-        if self.load_config(urlkey):
-            request = self.normalize_request(_request)
-        if self.static[urlkey]:
-            return urlkey, self.sequence[urlkey]
         id = request.method + " " + request.url() + " "
-        m = hashlib.sha224(id)
-        if self.load_config(urlkey+"."+m.hexdigest()):
-            request = self.normalize_request(_request)
         if headers.has_key("cookie"):
             cookies = Cookie.SimpleCookie("; ".join(headers["cookie"]))
             del headers["cookie"]
@@ -135,20 +120,10 @@ class Recorder:
         if self.verbosity > 1:
             print >> sys.stderr, "ID: " + id
         m = hashlib.sha224(id)
-        path = urlkey+"."+m.hexdigest()
-        if self.load_config(path):
-            request = self.normalize_request(_request)
-        if self.static[path]:
-            return path, self.sequence[path]
         req_text = request.assemble()
         m.update(req_text)
         path = urlkey+"."+m.hexdigest()
-        if self.load_config(path):
-            request = self.normalize_request(_request)
-        n = self.sequence[path]
-        n = str(n)
-        if self.load_config(path+"."+n):
-            request = self.normalize_request(_request)
+        n = str(self.sequence[path])
         if self.verbosity > 1:
             print >> sys.stderr, "PATH: " + path + "." + n
         return path, n
@@ -160,7 +135,6 @@ class Recorder:
                 self.cookies[key] = True
         return response
 
-    def ma
     def save_response(self, response):
         """
             Save response for later playback
@@ -202,10 +176,11 @@ class Recorder:
             Retrieve previously saved response saved by save_response
         """
         path, n = self.pathn(request)
-        fp = self.open(path+"."+n+".resp", 'r')
-        if not self.static[path]:
-            if not self.static[path+"."+n]:
-                self.sequence[path]+=1
+	try:
+	    fp = self.open(path+"."+n+".resp", 'r')
+	    self.sequence[path]+=1
+        except IOError:
+	    fp = self.open(path+".resp", 'r')
         proto, code, status = fp.readline().strip().split(" ", 2)
         code = int(code)
         headers = utils.Headers()
