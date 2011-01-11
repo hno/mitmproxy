@@ -3,9 +3,9 @@ mitmproxy to record a complete session and allow clients to play back the
 same session against the recorded data.
 
 The store is enabled by using the --store=.. option to mitmproxy or by using
-the noninteractive record program.
+the noninteractive mitmrecord program.
 
-To play back a recorded session use the playback program.
+To play back a recorded session use the mitmplayback program.
 
 Original README follows:
 
