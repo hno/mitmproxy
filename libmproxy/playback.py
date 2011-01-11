@@ -41,9 +41,9 @@ import utils
 import proxy
 import recorder
 
-class RecordMaster(controller.Master):
+class PlaybackMaster(controller.Master):
     """
-        A simple master that just records to files.
+        A simple master that plays back recorded responses.
     """
     def __init__(self, server, options):
         self.verbosity = options.verbose
@@ -58,16 +58,14 @@ class RecordMaster(controller.Master):
 
     def process_missing_response(self, request):
         response = None
-        print >> sys.stderr, request.assemble()
+        print >> sys.stderr, self.store.normalize_request(request).assemble_proxy()
         print >> sys.stderr, "Actions:"
         print >> sys.stderr, "  q  Quit"
-        print >> sys.stderr, "  u(rl)           search-replace on the URL query parameters including ?"
-        print >> sys.stderr, "  c(ookie)        search-replace in cookies"
-        print >> sys.stderr, "  h(header)       search-replace in whole request header"
-        print >> sys.stderr, "  s(static)       mark URL as static, returning previous response"
-        print >> sys.stderr, "  e(rror)         respond with a 404 error"
-        print >> sys.stderr, "  k(ill)          kill the request, empty response"
-        print >> sys.stderr, "  f(orward)       forward the request to the requested server and cache response"
+        print >> sys.stderr, "  a(dd)        Add pattern rule"
+        print >> sys.stderr, "  A(dd)        Add pattern rule (forced)"
+        print >> sys.stderr, "  e(rror)      respond with a 404 error"
+        print >> sys.stderr, "  k(ill)       kill the request, empty response"
+        print >> sys.stderr, "  f(orward)    forward the request to the requested server and cache response"
         #print >> sys.stderr, "  Use capital letters (C, H) to apply the command on every following request, not just this URL"
         command = raw_input("Action: ")
         command = command[:1]
@@ -76,14 +74,13 @@ class RecordMaster(controller.Master):
         if command == 'q':
             request.kill = True
             self.shutdown()
-        elif command == 'u' or command == 'c' or command == 'h':
-            search = raw_input("Search regex: ")
-            replace = raw_input("Replacement: ")
-            print >> sys.stderr, "NOTICE: Not yet implemented"
-        elif command == 's':
-            #recorder.make_previous_static(request)
-            print >> sys.stderr, "NOTICE: Not yet implemented"
-            pass
+        elif command == 'a' or command == 'A':
+            filt = raw_input("Filter: ")
+            search = raw_input("Search pattern: ")
+            replace = raw_input("Replacement string: ")
+	    self.store.add_rule(filt, search, replace)
+	    if command == 'A':
+		self.store.save_rule(filt, search, replace)
         elif command == 'k':
             request.kill = True
         elif command == 'f':
@@ -95,9 +92,13 @@ class RecordMaster(controller.Master):
             return request
         try:
             response = self.store.get_response(request)
+	    if command == 'a':
+		self.store.save_rule(filt, search, replace)
         except IOError:
             print >> sys.stderr, "NOTICE: Response still not found"
             response = self.process_missing_response(request)
+	    if command == 'a':
+		self.store.forget_last_rule()
         return response
 
     def handle_request(self, msg):

@@ -70,5 +70,5 @@ if __name__ == '__main__':
         certpath
     )
     server = proxy.ProxyServer(options.port)
-    m = playback.RecordMaster(server, options)
+    m = playback.PlaybackMaster(server, options)
     m.run()
