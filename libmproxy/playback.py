@@ -66,11 +66,9 @@ class PlaybackMaster(controller.Master):
         print >> sys.stderr, "  e(rror)      respond with a 404 error"
         print >> sys.stderr, "  k(ill)       kill the request, empty response"
         print >> sys.stderr, "  f(orward)    forward the request to the requested server and cache response"
-        #print >> sys.stderr, "  Use capital letters (C, H) to apply the command on every following request, not just this URL"
         command = raw_input("Action: ")
         command = command[:1]
         do_global = command.isupper()
-        command = command.lower()
         if command == 'q':
             request.kill = True
             self.shutdown()
