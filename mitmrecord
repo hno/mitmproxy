@@ -18,18 +18,9 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-import sys, os.path, os, errno
+import sys, os.path
 from libmproxy import proxy, controller, record, utils
 from optparse import OptionParser, OptionGroup
-
-def mkdir_p(path):
-    try:
-	os.makedirs(path)
-    except OSError as exc:
-	if exc.errno == errno.EEXIST:
-	    pass
-	else:
-	    raise
 
 if __name__ == '__main__':
     parser = OptionParser(
@@ -84,7 +75,7 @@ if __name__ == '__main__':
         certpath
     )
     server = proxy.ProxyServer(options.port)
-    mkdir_p(options.cache)
+    utils.mkdir_p(options.cache)
     if os.path.exists(options.cache + "/index.txt"):
 	print >> sys.stderr, "ERROR: data already recorded in %s"%options.cache
 	sys.exit(1)

@@ -642,7 +642,7 @@ class State:
 
     def add_response(self, resp):
 	if self.store is not None:
-	    self.store.save_response(msg)
+	    self.store.save_response(resp)
         f = self.flow_map.get(resp.request.connection)
         if not f:
             return False
@@ -661,6 +661,9 @@ class State:
         f.waiting = False
         f.backup()
         return f
+
+    def start_recording(self, recorder):
+        self.store = recorder
 
     @property
     def view(self):
@@ -818,8 +821,9 @@ class ConsoleMaster(controller.Master):
         self.stickycookie = None
         self.stickyhosts = {}
 
-	if options.store is not None:
-	    self.store = recorder.Recorder(options)
+	if options.cache is not None:
+	    self.state.start_recording(recorder.Recorder(options))
+
 
     def set_palette(self):
         self.palette = [

@@ -73,7 +73,7 @@ if __name__ == '__main__':
     group.add_option(
         "-w", "--store", action="store",
         type = "str", dest="cache", default=None,
-        help = "Request store location"
+        help = "Session store location"
     )
     group.add_option(
         "-C", "--cookies", action="append",
@@ -92,6 +92,8 @@ if __name__ == '__main__':
     proxy.config = proxy.Config(
         certpath
     )
+    if options.cache is not None:
+	utils.mkdir_p(options.cache)
     server = proxy.ProxyServer(options.port)
     m = console.ConsoleMaster(server, options)
     m.run()
