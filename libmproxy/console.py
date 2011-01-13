@@ -622,6 +622,7 @@ class State:
         self.limit = None
         self.intercept = None
         self.beep = None
+	self.store = None
 
     def add_browserconnect(self, f):
         self.flow_list.insert(0, f)
