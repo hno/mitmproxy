@@ -77,7 +77,7 @@ if __name__ == '__main__':
     server = proxy.ProxyServer(options.port)
     utils.mkdir_p(options.cache)
     if os.path.exists(options.cache + "/index.txt"):
-	print >> sys.stderr, "ERROR: data already recorded in %s"%options.cache
-	sys.exit(1)
+        print >> sys.stderr, "ERROR: data already recorded in %s"%options.cache
+        sys.exit(1)
     m = record.RecordMaster(server, options)
     m.run()

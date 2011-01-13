@@ -321,8 +321,8 @@ class ConnectionView(WWrap):
         response = self.flow.response
         response.code = code
         import BaseHTTPServer
-	if BaseHTTPServer.BaseHTTPRequestHandler.responses.has_key(int(code)):
-	    response.msg = BaseHTTPServer.BaseHTTPRequestHandler.responses[int(code)][0]
+        if BaseHTTPServer.BaseHTTPRequestHandler.responses.has_key(int(code)):
+            response.msg = BaseHTTPServer.BaseHTTPRequestHandler.responses[int(code)][0]
         self.master.refresh_connection(self.flow)
 
     def set_resp_msg(self, msg):
@@ -622,7 +622,7 @@ class State:
         self.limit = None
         self.intercept = None
         self.beep = None
-	self.store = None
+        self.store = None
 
     def add_browserconnect(self, f):
         self.flow_list.insert(0, f)
@@ -642,8 +642,8 @@ class State:
         return f
 
     def add_response(self, resp):
-	if self.store is not None:
-	    self.store.save_response(resp)
+        if self.store is not None:
+            self.store.save_response(resp)
         f = self.flow_map.get(resp.request.connection)
         if not f:
             return False
@@ -822,8 +822,8 @@ class ConsoleMaster(controller.Master):
         self.stickycookie = None
         self.stickyhosts = {}
 
-	if options.cache is not None:
-	    self.state.start_recording(recorder.Recorder(options))
+        if options.cache is not None:
+            self.state.start_recording(recorder.Recorder(options))
 
 
     def set_palette(self):
