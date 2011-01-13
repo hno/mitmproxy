@@ -225,7 +225,7 @@ class Recorder:
 
         print >> self.indexfp , time.time(), request.method, request.path
         if request.headers.has_key('referer'):
-            print >> self.indexfp, 'referer:', ','.join(request.headers[referer])
+            print >> self.indexfp, 'referer:', ','.join(request.headers['referer'])
         if len(self.cookies) > 0:
             print >> self.indexfp, 'cookies:', ','.join(self.cookies)
         print >> self.indexfp , path
