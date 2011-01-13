@@ -53,19 +53,19 @@ def constant_factory(value):
 
 class PatternRule:
     """
-	Request pattern rule
-	:_ivar	_match		filt pattern rule
-	:_ivar	_search		Regex pattern to search for
-	:_ivar	_replace	Replacement string
+        Request pattern rule
+        :_ivar  _match          filt pattern rule
+        :_ivar  _search         Regex pattern to search for
+        :_ivar  _replace        Replacement string
     """
     def __init__(self, pattern, search, replace):
         self.match = filt.parse(pattern)
-	self.search = re.compile(search)
-	self.replace = replace
+        self.search = re.compile(search)
+        self.replace = replace
     def execute(self, request, text):
-	if self.match and not self.match(request):
-	    return text
-	return re.sub(self.search, self.replace, text)
+        if self.match and not self.match(request):
+            return text
+        return re.sub(self.search, self.replace, text)
 
 class Recorder:
     """
@@ -78,31 +78,31 @@ class Recorder:
             for cookie in options.cookies:
                 self.cookies[cookie] = True
         except AttributeError: pass
-	try:
-	    self.verbosity = options.verbose
-	except AttributeError:
-	    self.verbosity = False
+        try:
+            self.verbosity = options.verbose
+        except AttributeError:
+            self.verbosity = False
         self.storedir = options.cache
-	self.patterns = []
+        self.patterns = []
         self.indexfp = None
         self.reset_config()
 
     def reset_config(self):
-	self.patterns = []
-	self.load_config("default")
+        self.patterns = []
+        self.load_config("default")
 
     def add_rule(self, match, search, replace):
-	self.patterns.append(PatternRule(match, search, replace))
+        self.patterns.append(PatternRule(match, search, replace))
 
     def forget_last_rule(self):
-	self.patterns.pop()
+        self.patterns.pop()
 
     def save_rule(self, match, search, replace, configfile = "default"):
-	fp = self.open(configfile + ".cfg", "a")
-	print >> fp, "Condition: " + match
-	print >> fp, "Search: " + search
-	print >> fp, "Replace: " + replace
-	fp.close()
+        fp = self.open(configfile + ".cfg", "a")
+        print >> fp, "Condition: " + match
+        print >> fp, "Search: " + search
+        print >> fp, "Replace: " + replace
+        fp.close()
 
     def load_config(self, name):
         """
@@ -117,15 +117,15 @@ class Recorder:
             return False
         for line in fp:
             directive, value = line.split(" ", 1)
-	    value = value.strip("\r\n")
+            value = value.strip("\r\n")
             if directive == "Cookie:":
                 self.cookies[value] = True
-	    if directive == "Condition:":
-		match = value
-	    if directive == "Search:":
-		search = value
-	    if directive == "Replace:":
-		self.add_rule(match, search, value)
+            if directive == "Condition:":
+                match = value
+            if directive == "Search:":
+                search = value
+            if directive == "Replace:":
+                self.add_rule(match, search, value)
         fp.close()
         return True
 
@@ -143,21 +143,21 @@ class Recorder:
         """
             Filter request to simplify storage matching
         """
-	req_text = request.assemble_proxy()
-	orig_req_text = req_text
-       	for pattern in self.patterns:
-	    req_text = pattern.execute(request, req_text)
-	if req_text == orig_req_text:
-	    return request
-	fp = cStringIO.StringIO(req_text)
-	request_line = fp.readline()
-	method, scheme, host, port, path, httpminor = proxy.parse_request_line(request_line)
-	headers = utils.Headers()
-	headers.read(fp)
-	if request.content is None:
-	    content = None
-	else:
-	    content = fp.read()
+        req_text = request.assemble_proxy()
+        orig_req_text = req_text
+        for pattern in self.patterns:
+            req_text = pattern.execute(request, req_text)
+        if req_text == orig_req_text:
+            return request
+        fp = cStringIO.StringIO(req_text)
+        request_line = fp.readline()
+        method, scheme, host, port, path, httpminor = proxy.parse_request_line(request_line)
+        headers = utils.Headers()
+        headers.read(fp)
+        if request.content is None:
+            content = None
+        else:
+            content = fp.read()
         return proxy.Request(request.connection, host, port, scheme, method, path, headers, content)
 
     def open(self, path, mode):
@@ -230,7 +230,7 @@ class Recorder:
             print >> self.indexfp, 'cookies:', ','.join(self.cookies)
         print >> self.indexfp , path
         print >> self.indexfp , ""
-	self.indexfp.flush()
+        self.indexfp.flush()
 
 
     def get_response(self, request):
@@ -238,11 +238,11 @@ class Recorder:
             Retrieve previously saved response saved by save_response
         """
         path, n = self.pathn(request)
-	try:
-	    fp = self.open(path+"."+n+".resp", 'r')
-	    self.sequence[path]+=1
+        try:
+            fp = self.open(path+"."+n+".resp", 'r')
+            self.sequence[path]+=1
         except IOError:
-	    fp = self.open(path+".resp", 'r')
+            fp = self.open(path+".resp", 'r')
         proto, code, status = fp.readline().strip().split(" ", 2)
         code = int(code)
         headers = utils.Headers()
