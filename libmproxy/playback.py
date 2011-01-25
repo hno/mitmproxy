@@ -20,7 +20,7 @@
 # OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 #
-# Alternatively you may this file under a GPLv3 license as follows:
+# Alternatively you may use this file under a GPLv3 license as follows:
 #
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
