@@ -180,8 +180,7 @@ class Request(controller.Msg):
             headers["content-length"] = [str(len(content))]
         else:
             content = ""
-        if self.close:
-            headers["connection"] = ["close"]
+        headers["connection"] = ["close"]
         if not _proxy:
             return self.FMT % (self.method, self.path, str(headers), content)
         else:
@@ -289,7 +288,6 @@ class FileLike:
 class ServerConnection:
     def __init__(self, request):
         self.request = request
-        self.close = False
         self.server, self.rfile, self.wfile = None, None, None
         self.connect()
 
@@ -307,7 +305,6 @@ class ServerConnection:
 
     def send_request(self, request):
         try:
-            request.close = self.close
             self.wfile.write(request.assemble())
             self.wfile.flush()
         except socket.error, err:
@@ -370,7 +367,6 @@ class ProxyHandler(SocketServer.StreamRequestHandler):
                 response = response.send(self.mqueue)
             else:
                 server = ServerConnection(request)
-                server.close = True
                 server.send_request(request)
                 response = server.read_response()
                 response = response.send(self.mqueue)
