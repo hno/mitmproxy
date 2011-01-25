@@ -67,6 +67,29 @@ class PatternRule:
             return text
         return re.sub(self.search, self.replace, text)
 
+class RecorderConnection(proxy.ServerConnection):
+    """
+        Simulated ServerConnection connecting to the cache
+    """
+    # Note: This may chane in future. Division between Recorder
+    # and RecorderConnection is not yet finalized
+    def __init__(self, request, fp):
+        self.host = request.host
+        self.port = request.port
+        self.scheme = request.scheme
+        self.close = False
+        self.server = fp
+        self.rfile = fp
+        self.wfile = fp
+
+    def send_request(self, request):
+        self.request = request
+
+    def read_response(self):
+        response = proxy.ServerConnection.read_response(self)
+        response.cached = True
+        return response
+
 class Recorder:
     """
         A simple record/playback cache
@@ -143,6 +166,7 @@ class Recorder:
         """
             Filter request to simplify storage matching
         """
+        request.close = False
         req_text = request.assemble_proxy()
         orig_req_text = req_text
         for pattern in self.patterns:
@@ -243,16 +267,9 @@ class Recorder:
             self.sequence[path]+=1
         except IOError:
             fp = self.open(path+".resp", 'r')
-        proto, code, status = fp.readline().strip().split(" ", 2)
-        code = int(code)
-        headers = utils.Headers()
-        headers.read(fp)
-        utils.try_del(headers, 'transfer-encoding')
-        if request.method == "HEAD":
-            content = None
-        else:
-            content = proxy.read_http_body(fp, headers, True)
-        fp.close()
-        response = proxy.Response(request, code, proto, status, headers, content)
-        response.cached = True
+        server = RecorderConnection(request, fp)
+        fp = None	# Handed over to RecorderConnection
+        server.send_request(request)
+        response = server.read_response()
+        server.terminate()
         return response
