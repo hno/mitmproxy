@@ -287,23 +287,26 @@ class FileLike:
 
 class ServerConnection:
     def __init__(self, request):
-        self.request = request
+        self.host = request.host
+        self.port = request.port
+        self.scheme = request.scheme
         self.server, self.rfile, self.wfile = None, None, None
         self.connect()
 
     def connect(self):
         try:
-            addr = socket.gethostbyname(self.request.host)
+            addr = socket.gethostbyname(self.host)
             server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            if self.request.scheme == "https":
+            if self.scheme == "https":
                 server = ssl.wrap_socket(server)
-            server.connect((addr, self.request.port))
+            server.connect((addr, self.port))
         except socket.error, err:
-            raise ProxyError(200, 'Error connecting to "%s": %s' % (self.request.host, err))
+            raise ProxyError(200, 'Error connecting to "%s": %s' % (self.host, err))
         self.server = server
         self.rfile, self.wfile = server.makefile('rb'), server.makefile('wb')
 
     def send_request(self, request):
+        self.request = request
         try:
             self.wfile.write(request.assemble())
             self.wfile.flush()
