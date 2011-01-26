@@ -69,7 +69,7 @@ def findPackages(path, dataExclude=[]):
 
 long_description = file("README").read()
 packages, package_data = findPackages("libmproxy")
-version = "0.4-cache"
+version = "0.4.1-cache"
 setup(
         name = "mitmproxy",
         version = VERSION,
