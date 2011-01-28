@@ -92,6 +92,10 @@ class PlaybackMaster(controller.Master):
             response = self.store.get_response(request)
             if command == 'a':
                 self.store.save_rule(filt, search, replace)
+        except ProxyError:
+            print >> sys.stderr, "ERROR: Malformed substitution rule"
+	    self.store.forget_last_rule()
+            response = self.process_missing_response(request)
         except IOError:
             print >> sys.stderr, "NOTICE: Response still not found"
             response = self.process_missing_response(request)
