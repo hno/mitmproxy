@@ -394,7 +394,7 @@ class ServerConnection:
                 server = ssl.wrap_socket(server)
             server.connect((addr, self.port))
         except socket.error, err:
-            raise ProxyError(200, 'Error connecting to "%s": %s' % (self.host, err))
+            raise ProxyError(504, 'Error connecting to "%s": %s' % (self.host, err))
         self.server = server
         self.rfile, self.wfile = server.makefile('rb'), server.makefile('wb')
 
@@ -405,7 +405,7 @@ class ServerConnection:
             self.wfile.write(request.assemble())
             self.wfile.flush()
         except socket.error, err:
-            raise ProxyError(500, 'Error sending data to "%s": %s' % (request.host, err))
+            raise ProxyError(504, 'Error sending data to "%s": %s' % (request.host, err))
 
     def read_response(self):
         line = self.rfile.readline()
