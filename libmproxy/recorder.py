@@ -195,17 +195,19 @@ class Recorder:
         request = self.filter_request(request)
         headers = request.headers
         urlkey = (request.host + request.path)[:80].translate(string.maketrans(":/?","__."))
-        id = request.method + " " + request.url() + " "
+        id = ""
         if headers.has_key("cookie"):
             cookies = Cookie.SimpleCookie("; ".join(headers["cookie"]))
             del headers["cookie"]
             for key, morsel in cookies.iteritems():
                 if self.cookies.has_key(key):
-                    id = id + key + "=" + morsel.value + " "
+                    id = id + key + "=" + morsel.value + "\n"
         if self.verbosity > 1:
             print >> sys.stderr, "ID: " + id
         m = hashlib.sha224(id)
         req_text = request.assemble_proxy()
+        if self.verbosity > 2:
+            print >> sys.stderr, req_text
         m.update(req_text)
         path = urlkey+"."+m.hexdigest()
         n = str(self.sequence[path])
