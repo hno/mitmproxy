@@ -79,6 +79,8 @@ class PlaybackMaster(controller.Master):
             self.store.add_rule(filt, search, replace)
             if command == 'A':
                 self.store.save_rule(filt, search, replace)
+        elif command == 'e':
+            return proxy.Response(request, "404", "Not found", utils.Headers(), "Not found")
         elif command == 'k':
             request.kill = True
         elif command == 'f':
