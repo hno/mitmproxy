@@ -75,7 +75,10 @@ def parse_url(url):
         port = int(port)
     else:
         host = netloc
-        port = 80
+        if scheme == "https":
+            port = 443
+        else:
+            port = 80
     path = urlparse.urlunparse(('', '', path, params, query, fragment))
     if not path:
         path = "/"
@@ -120,16 +123,45 @@ def parse_request_line(request):
 class Request(controller.Msg):
     FMT = '%s %s HTTP/1.1\r\n%s\r\n%s'
     FMT_PROXY = '%s %s://%s:%s%s HTTP/1.1\r\n%s\r\n%s'
-    def __init__(self, connection, host, port, scheme, method, path, headers, content):
+    def __init__(self, connection, host, port, scheme, method, path, headers, content, timestamp=None):
         self.connection = connection
         self.host, self.port, self.scheme = host, port, scheme
         self.method, self.path, self.headers, self.content = method, path, headers, content
-        self.kill = False
         self.close = False
+        self.timestamp = timestamp or time.time()
         controller.Msg.__init__(self)
 
     def is_cached(self):
         return False
+
+    def get_state(self):
+        return dict(
+            host = self.host,
+            port = self.port,
+            scheme = self.scheme,
+            method = self.method,
+            path = self.path,
+            headers = self.headers.get_state(),
+            content = self.content,
+            timestamp = self.timestamp,
+        )
+
+    @classmethod
+    def from_state(klass, state):
+        return klass(
+            None,
+            state["host"],
+            state["port"],
+            state["scheme"],
+            state["method"],
+            state["path"],
+            utils.Headers.from_state(state["headers"]),
+            state["content"],
+            state["timestamp"]
+        )
+
+    def __eq__(self, other):
+        return self.get_state() == other.get_state()
 
     def copy(self):
         c = copy.copy(self)
@@ -191,13 +223,38 @@ class Request(controller.Msg):
 
 class Response(controller.Msg):
     FMT = '%s\r\n%s\r\n%s'
-    def __init__(self, request, code, msg, headers, content):
+    def __init__(self, request, code, msg, headers, content, timestamp=None):
         self.request = request
         self.code, self.msg = code, msg
         self.headers, self.content = headers, content
-        self.kill = False
         self.cached = False
+        self.timestamp = timestamp or time.time()
         controller.Msg.__init__(self)
+
+    def get_state(self):
+        return dict(
+            code = self.code,
+            proto = self.proto,
+            msg = self.msg,
+            headers = self.headers.get_state(),
+            timestamp = self.timestamp,
+            content = self.content
+        )
+
+    @classmethod
+    def from_state(klass, request, state):
+        return klass(
+            request,
+            state["code"],
+            state["proto"],
+            state["msg"],
+            utils.Headers.from_state(state["headers"]),
+            state["content"],
+            state["timestamp"],
+        )
+
+    def __eq__(self, other):
+        return self.get_state() == other.get_state()
 
     def copy(self):
         c = copy.copy(self)
@@ -247,12 +304,30 @@ class BrowserConnection(controller.Msg):
 
 
 class Error(controller.Msg):
-    def __init__(self, connection, msg):
+    def __init__(self, connection, msg, timestamp=None):
         self.connection, self.msg = connection, msg
+        self.timestamp = timestamp or time.time()
         controller.Msg.__init__(self)
 
     def copy(self):
         return copy.copy(self)
+
+    def get_state(self):
+        return dict(
+            msg = self.msg,
+            timestamp = self.timestamp,
+        )
+
+    @classmethod
+    def from_state(klass, state):
+        return klass(
+            None,
+            state["msg"],
+            state["timestamp"],
+        )
+
+    def __eq__(self, other):
+        return self.get_state() == other.get_state()
 
 
 class FileLike:
@@ -286,6 +361,8 @@ class FileLike:
                     break
         return result
 
+
+#begin nocover
 
 class ServerConnection:
     def __init__(self, request):
@@ -321,9 +398,11 @@ class ServerConnection:
         line = self.rfile.readline()
         if line == "\r\n" or line == "\n": # Possible leftover from previous message
             line = self.rfile.readline()
+        if not line:
+            raise ProxyError(502, "Blank server response.")
         parts = line.strip().split(" ", 2)
         if not len(parts) == 3:
-            raise ProxyError(502, "Invalid server response.")
+            raise ProxyError(502, "Invalid server response: %s."%line)
         proto, code, msg = parts
         code = int(code)
         headers = utils.Headers()
@@ -365,8 +444,9 @@ class ProxyHandler(SocketServer.StreamRequestHandler):
                 bc.close = True
                 return
             request = request.send(self.mqueue)
-            if request.kill:
+            if request is None:
                 bc.close = True
+                #self.finish()
                 return
             if request.is_response():
                 response = request
@@ -377,10 +457,11 @@ class ProxyHandler(SocketServer.StreamRequestHandler):
                 server.send_request(request)
                 response = server.read_response()
                 response = response.send(self.mqueue)
-                if response.kill:
+                if response is None:
                     server.terminate()
-            if response.kill:
+            if response is None:
                 bc.close = True
+                #self.finish()
                 return
             self.send_response(response)
         except IOError:
@@ -465,6 +546,7 @@ class ProxyHandler(SocketServer.StreamRequestHandler):
         self.wfile.flush()
 
     def terminate(self, connection, wfile, rfile):
+        self.request.close()
         try:
             if not getattr(wfile, "closed", False):
                 wfile.flush()
@@ -476,22 +558,27 @@ class ProxyHandler(SocketServer.StreamRequestHandler):
         self.terminate(self.connection, self.wfile, self.rfile)
 
     def send_error(self, code, body):
-        import BaseHTTPServer
-        response = BaseHTTPServer.BaseHTTPRequestHandler.responses[code][0]
-        self.wfile.write("HTTP/1.1 %s %s\r\n" % (code, response))
-        self.wfile.write("Server: %s\r\n"%NAME)
-        self.wfile.write("Content-type: text/html\r\n")
-        self.wfile.write("\r\n")
-        self.wfile.write('<html><head>\n<title>%d %s</title>\n</head>\n'
-                '<body>\n%s\n</body>\n</html>' % (code, response, body))
-        self.wfile.flush()
-        self.wfile.close()
-        self.rfile.close()
+        try:
+            import BaseHTTPServer
+            response = BaseHTTPServer.BaseHTTPRequestHandler.responses[code][0]
+            self.wfile.write("HTTP/1.1 %s %s\r\n" % (code, response))
+            self.wfile.write("Server: %s\r\n"%NAME)
+            self.wfile.write("Connection: closes\r\n")
+            self.wfile.write("Content-type: text/html\r\n")
+            self.wfile.write("\r\n")
+            self.wfile.write('<html><head>\n<title>%d %s</title>\n</head>\n'
+                    '<body>\n%s\n</body>\n</html>' % (code, response, body))
+            self.wfile.flush()
+            self.wfile.close()
+            self.rfile.close()
+        except IOError:
+            pass
 
 
 ServerBase = SocketServer.ThreadingTCPServer
 ServerBase.daemon_threads = True	# Terminate workers when main thread terminates
 class ProxyServer(ServerBase):
+    request_queue_size = 20
     allow_reuse_address = True
     def __init__(self, port):
         self.port = port

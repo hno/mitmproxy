@@ -2,12 +2,22 @@
     This module provides more sophisticated flow tracking. These match requests
     with their responses, and provide filtering and interception facilities.
 """
+import subprocess, base64, sys
+from contrib import bson
 import proxy, threading
+
+class RunException(Exception):
+    def __init__(self, msg, returncode, errout):
+        Exception.__init__(self, msg)
+        self.returncode = returncode
+        self.errout = errout
+
 
 class ReplayConnection:
     pass
 
 
+# begin nocover
 class ReplayThread(threading.Thread):
     def __init__(self, flow, masterq):
         self.flow, self.masterq = flow, masterq
@@ -21,15 +31,102 @@ class ReplayThread(threading.Thread):
         except proxy.ProxyError, v:
             err = proxy.Error(self.flow.connection, v.msg)
             err.send(self.masterq)
+# end nocover
 
 
 class Flow:
     def __init__(self, connection):
         self.connection = connection
         self.request, self.response, self.error = None, None, None
-        self.waiting = True
         self.intercepting = False
         self._backup = None
+
+    def script_serialize(self):
+        data = self.get_state()
+        data = bson.dumps(data)
+        return base64.encodestring(data)
+
+    @classmethod
+    def script_deserialize(klass, data):
+        try:
+            data = base64.decodestring(data)
+            data = bson.loads(data)
+        # bson.loads doesn't define a particular exception on error...
+        except Exception:
+            return None
+        return klass.from_state(data)
+
+    def run_script(self, path):
+        """
+            Run a script on a flow.
+
+            Returns a (flow, stderr output) tuple, or raises RunException if
+            there's an error.
+        """
+        self.backup()
+        data = self.script_serialize()
+        try:
+            p = subprocess.Popen(
+                    [path],
+                    stdout=subprocess.PIPE,
+                    stdin=subprocess.PIPE,
+                    stderr=subprocess.PIPE,
+                )
+        except OSError, e:
+            raise RunException(e.args[1], None, None)
+        so, se = p.communicate(data)
+        if p.returncode:
+            raise RunException(
+                "Script returned error code %s"%p.returncode,
+                p.returncode,
+                se
+            )
+        f = Flow.script_deserialize(so)
+        if not f:
+            raise RunException(
+                    "Invalid response from script.",
+                    p.returncode,
+                    se
+                )
+        return f, se
+
+    def dump(self):
+        data = dict(
+                flows = [self.get_state()]
+               )
+        return bson.dumps(data)
+
+    def get_state(self):
+        return dict(
+            request = self.request.get_state() if self.request else None,
+            response = self.response.get_state() if self.response else None,
+            error = self.error.get_state() if self.error else None,
+        )
+
+    def load_state(self, state):
+        if state["request"]:
+            self.request = proxy.Request.from_state(state["request"])
+        if state["response"]:
+            self.response = proxy.Response.from_state(self.request, state["response"])
+        if state["error"]:
+            self.error = proxy.Error.from_state(state["error"])
+
+    @classmethod
+    def from_state(klass, state):
+        f = klass(None)
+        f.load_state(state)
+        return f
+
+    def __eq__(self, other):
+        return self.get_state() == other.get_state()
+
+    def modified(self):
+        # FIXME: Save a serialization in backup, compare current with
+        # backup to detect if flow has _really_ been modified.
+        if self._backup:
+            return True
+        else:
+            return False
 
     def backup(self):
         if not self._backup:
@@ -42,9 +139,9 @@ class Flow:
 
     def revert(self):
         if self._backup:
-            self.waiting = False
             restore = [i.copy() if i else None for i in self._backup]
             self.connection, self.request, self.response, self.error = restore
+            self._backup = None
 
     def match(self, pattern):
         if pattern:
@@ -58,14 +155,13 @@ class Flow:
         return isinstance(self.connection, ReplayConnection)
 
     def kill(self):
-        if self.intercepting:
-            if not self.request.acked:
-                self.request.kill = True
-                self.request.ack()
-            elif self.response and not self.response.acked:
-                self.response.kill = True
-                self.response.ack()
-            self.intercepting = False
+        if self.request and not self.request.acked:
+            self.request.kill = True
+            self.request.ack()
+        elif self.response and not self.response.acked:
+            self.response.kill = True
+            self.response.ack()
+        self.intercepting = False
 
     def intercept(self):
         self.intercepting = True
@@ -112,8 +208,6 @@ class State:
         if not f:
             return False
         f.response = resp
-        f.waiting = False
-        f.backup()
         return f
 
     def add_error(self, err):
@@ -125,15 +219,31 @@ class State:
         if not f:
             return None
         f.error = err
-        f.waiting = False
-        f.backup()
         return f
+
+    def dump_flows(self):
+        data = dict(
+                flows =[i.get_state() for i in self.view]
+               )
+        return bson.dumps(data)
+
+    def load_flows(self, js):
+        data = bson.loads(js)
+        data = [Flow.from_state(i) for i in data["flows"]]
+        self.flow_list.extend(data)
 
     def set_limit(self, limit):
         """
             Limit is a compiled filter expression, or None.
         """
         self.limit = limit
+
+    @property
+    def view(self):
+        if self.limit:
+            return tuple([i for i in self.flow_list if i.match(self.limit)])
+        else:
+            return tuple(self.flow_list[:])
 
     def get_connection(self, itm):
         if isinstance(itm, (proxy.BrowserConnection, ReplayConnection)):
@@ -155,7 +265,8 @@ class State:
     def delete_flow(self, f):
         if not f.intercepting:
             c = self.get_connection(f)
-            del self.flow_map[c]
+            if c in self.flow_map:
+                del self.flow_map[c]
             self.flow_list.remove(f)
             return True
         return False
@@ -177,7 +288,8 @@ class State:
             Replaces the matching connection object with a ReplayConnection object.
         """
         conn = self.get_connection(f)
-        del self.flow_map[conn]
+        if conn in self.flow_map:
+            del self.flow_map[conn]
         f.revert()
         self.flow_map[f.connection] = f
 
@@ -193,7 +305,8 @@ class State:
         if f.request:
             f.backup()
             conn = self.get_connection(f)
-            del self.flow_map[conn]
+            if conn in self.flow_map:
+                del self.flow_map[conn]
             rp = ReplayConnection()
             f.connection = rp
             f.request.connection = rp
