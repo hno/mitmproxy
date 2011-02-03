@@ -124,7 +124,7 @@ class Request(controller.Msg):
     FMT = '%s %s HTTP/1.1\r\n%s\r\n%s'
     FMT_PROXY = '%s %s://%s:%s%s HTTP/1.1\r\n%s\r\n%s'
     def __init__(self, connection, host, port, scheme, method, path, headers, content, timestamp=None):
-        self.connection = connection
+        self.client_conn = connection
         self.host, self.port, self.scheme = host, port, scheme
         self.method, self.path, self.headers, self.content = method, path, headers, content
         self.close = False
@@ -149,7 +149,7 @@ class Request(controller.Msg):
     @classmethod
     def from_state(klass, state):
         return klass(
-            None,
+            ClientConnection(None),
             state["host"],
             state["port"],
             state["scheme"],
@@ -293,19 +293,32 @@ class Response(controller.Msg):
         return self.FMT%data
 
 
-class BrowserConnection(controller.Msg):
-    def __init__(self, address, port):
-        self.address, self.port = address, port
+class ClientConnection(controller.Msg):
+    def __init__(self, address):
+        """
+            address is an (address, port) tuple, or None if this connection has
+            been replayed from within mitmproxy.
+        """
+        self.address = address
         self.close = False
         controller.Msg.__init__(self)
+
+    def set_replay(self):
+        self.address = None
+
+    def is_replay(self):
+        if self.address:
+            return False
+        else:
+            return True
 
     def copy(self):
         return copy.copy(self)
 
 
 class Error(controller.Msg):
-    def __init__(self, connection, msg, timestamp=None):
-        self.connection, self.msg = connection, msg
+    def __init__(self, client_conn, msg, timestamp=None):
+        self.client_conn, self.msg = client_conn, msg
         self.timestamp = timestamp or time.time()
         controller.Msg.__init__(self)
 
@@ -430,22 +443,22 @@ class ProxyHandler(SocketServer.StreamRequestHandler):
         SocketServer.StreamRequestHandler.__init__(self, request, client_address, server)
 
     def handle(self):
-        bc = BrowserConnection(*self.client_address)
-        bc.send(self.mqueue)
-        while not bc.close:
-            self.handle_request(bc)
+        cc = ClientConnection(self.client_address)
+        cc.send(self.mqueue)
+        while not cc.close:
+            self.handle_request(cc)
         self.finish()
 
-    def handle_request(self, bc):
+    def handle_request(self, cc):
         server = None
         try:
-            request = self.read_request(bc)
+            request = self.read_request(cc)
             if request is None:
-                bc.close = True
+                cc.close = True
                 return
             request = request.send(self.mqueue)
             if request is None:
-                bc.close = True
+                cc.close = True
                 #self.finish()
                 return
             if request.is_response():
@@ -460,20 +473,20 @@ class ProxyHandler(SocketServer.StreamRequestHandler):
                 if response is None:
                     server.terminate()
             if response is None:
-                bc.close = True
+                cc.close = True
                 #self.finish()
                 return
             self.send_response(response)
         except IOError:
             pass
         except ProxyError, e:
-            err = Error(bc, e.msg)
+            err = Error(cc, e.msg)
             err.send(self.mqueue)
             self.send_error(e.code, e.msg)
         if server:
             server.terminate()
 
-    def read_request(self, connection):
+    def read_request(self, client_conn):
         line = self.rfile.readline()
         if line == "\r\n" or line == "\n": # Possible leftover from previous message
             line = self.rfile.readline()
@@ -530,16 +543,16 @@ class ProxyHandler(SocketServer.StreamRequestHandler):
             else:
                 raise ProxyError(417, 'Unmet expect: %s'%expect)
         if httpminor == 0:
-            connection.close = True
+            client_conn.close = True
         if headers.has_key('connection'):
             for value in ",".join(headers['connection']).split(","):
                 value = value.strip()
                 if value == "close":
-                    connection.close = True
+                    client_conn.close = True
                 if value == "keep-alive":
-                    connection.close = False
-        content = read_http_body(self.rfile, connection, headers, False)
-        return Request(connection, host, port, scheme, method, path, headers, content)
+                    client_conn.close = False
+        content = read_http_body(self.rfile, client_conn, headers, False)
+        return Request(client_conn, host, port, scheme, method, path, headers, content)
 
     def send_response(self, response):
         self.wfile.write(response.assemble())
