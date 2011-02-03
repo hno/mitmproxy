@@ -33,6 +33,39 @@ def try_del(dict, key):
         pass
 
 
+def read_chunked(fp):
+    content = ""
+    while 1:
+        line = fp.readline()
+        if not line:
+            raise IOError("Connection closed")
+        if line == '\r\n' or line == '\n':
+            continue
+        length = int(line,16)
+        if not length:
+            break
+        content += fp.read(length)
+    while 1:
+        line = fp.readline()
+        if not line:
+            raise IOError("Connection closed")
+        if line == '\r\n' or line == '\n':
+            break
+    return content
+    
+def read_http_body(fp, headers, all):
+    if headers.has_key('transfer-encoding'):
+        if not ",".join(headers["transfer-encoding"]) == "chunked":
+            raise IOError('Invalid transfer-encoding')
+        content = read_chunked(fp)
+    elif headers.has_key("content-length"):
+        content = fp.read(int(headers["content-length"][0]))
+    elif all:
+        content = fp.read()
+    else:
+        content = None
+    return content
+
 def parse_url(url):
     """
         Returns a (scheme, host, port, path) tuple, or None on error.
@@ -64,26 +97,24 @@ def parse_proxy_request(request):
         method, url, protocol = string.split(request)
     except ValueError:
         raise ProxyError(400, "Can't parse request")
-    if method in ['GET', 'HEAD', 'POST']:
-        if url.startswith("/"):
+    if method == 'CONNECT':
+        scheme = None
+        path = None
+        host, port = url.split(":")
+        port = int(port)
+    else:
+        if url.startswith("/") or url == "*":
             scheme, port, host, path = None, None, None, url
         else:
             parts = parse_url(url)
             if not parts:
                 raise ProxyError(400, "Invalid url: %s"%url)
             scheme, host, port, path = parts
-    elif method == 'CONNECT':
-        scheme = None
-        path = None
-        host, port = url.split(":")
-        port = int(port)
-    else:
-        raise ProxyError(501, "Unknown request method: %s" % method)
     return method, scheme, host, port, path
 
 
 class Request(controller.Msg):
-    FMT = '%s %s HTTP/1.0\r\n%s\r\n%s'
+    FMT = '%s %s HTTP/1.1\r\n%s\r\n%s'
     def __init__(self, client_conn, host, port, scheme, method, path, headers, content, timestamp=None):
         self.client_conn = client_conn
         self.host, self.port, self.scheme = host, port, scheme
@@ -125,12 +156,15 @@ class Request(controller.Msg):
         c.headers = self.headers.copy()
         return c
 
-    def url(self):
+    def hostport(self):
         if (self.port, self.scheme) in [(80, "http"), (443, "https")]:
             host = self.host
         else:
             host = "%s:%s"%(self.host, self.port)
-        return "%s://%s%s"%(self.scheme, host, self.path)
+        return host
+
+    def url(self):
+        return "%s://%s%s"%(self.scheme, self.hostport(), self.path)
 
     def set_url(self, url):
         parts = parse_url(url)
@@ -155,8 +189,17 @@ class Request(controller.Msg):
         try_del(headers, 'proxy-connection')
         try_del(headers, 'keep-alive')
         try_del(headers, 'connection')
+        try_del(headers, 'content-length')
+        try_del(headers, 'transfer-encoding')
+        if not headers.has_key('host'):
+            headers["host"] = [self.hostport()]
+        content = self.content
+        if content is not None:
+            headers["content-length"] = [length(content)]
+        else:
+            content = ""
         headers["connection"] = ["close"]
-        data = (self.method, self.path, str(headers), self.content)
+        data = (self.method, self.path, str(headers), content)
         return self.FMT%data
 
 
@@ -215,9 +258,15 @@ class Response(controller.Msg):
         try_del(headers, 'proxy-connection')
         try_del(headers, 'connection')
         try_del(headers, 'keep-alive')
+        try_del(headers, 'transfer-encoding')
+        content = self.content
+        if content is not None:
+            headers["content-length"] = [str(len(content))]
+        else:
+            content = ""
         headers["connection"] = ["close"]
         proto = "%s %s %s"%(self.proto, self.code, self.msg)
-        data = (proto, str(headers), self.content)
+        data = (proto, str(headers), content)
         return self.FMT%data
 
 
@@ -336,15 +385,15 @@ class ServerConnection:
             raise ProxyError(200, "Blank server response.")
         parts = proto.strip().split(" ", 2)
         if not len(parts) == 3:
-            raise ProxyError(200, "Invalid server response: %s."%proto)
+            raise ProxyError(502, "Invalid server response: %s."%proto)
         proto, code, msg = parts
         code = int(code)
         headers = utils.Headers()
         headers.read(self.rfile)
-        if headers.has_key("content-length"):
-            content = self.rfile.read(int(headers["content-length"][0]))
+        if self.request.method == "HEAD":
+            content = None
         else:
-            content = self.rfile.read()
+            content = read_http_body(self.rfile, headers, True)
         return Response(self.request, code, proto, msg, headers, content)
 
     def terminate(self):
@@ -398,14 +447,12 @@ class ProxyHandler(SocketServer.StreamRequestHandler):
     def read_request(self, client_conn):
         request = self.rfile.readline()
         method, scheme, host, port, path = parse_proxy_request(request)
-        if not host:
-            raise ProxyError(200, 'Invalid request: %s'%request)
         if method == "CONNECT":
             # Discard additional headers sent to the proxy. Should I expose
             # these to users?
             while 1:
                 d = self.rfile.readline()
-                if not d.strip():
+                if d == '\r\n' or d == '\n':
                     break
             self.wfile.write('HTTP/1.1 200 Connection established\r\n')
             self.wfile.write('Proxy-agent: %s\r\n'%NAME)
@@ -421,17 +468,27 @@ class ProxyHandler(SocketServer.StreamRequestHandler):
             )
             self.rfile = FileLike(self.connection)
             self.wfile = FileLike(self.connection)
-            method, _, _, _, path = parse_proxy_request(self.rfile.readline())
-            scheme = "https"
+            method, scheme, host, port, path = parse_proxy_request(self.rfile.readline())
+	    if scheme is None:
+		scheme = "https"
         headers = utils.Headers()
         headers.read(self.rfile)
-        if method == 'POST' and not headers.has_key('content-length'):
-            raise ProxyError(400, "Missing Content-Length for POST method")
-        if headers.has_key("content-length") and int(headers["content-length"][0]):
-            content = self.rfile.read(int(headers["content-length"][0]))
-        else:
-            content = ""
-        return Request(client_conn, host, port, scheme, method, path, headers, content)
+	if host is None and headers.has_key("host"):
+	    netloc = headers["host"][0]
+	    if ':' in netloc:
+		host, port = string.split(netloc, ':')
+		port = int(port)
+	    else:
+		host = netloc
+		if scheme == "https":
+		    port = 443
+		else:
+		    port = 80
+	    port = int(port)
+        if host is None:
+            raise ProxyError(400, 'Invalid request: %s'%request)
+        content = read_http_body(self.rfile, headers, False)
+        return Request(connection, host, port, scheme, method, path, headers, content)
 
     def send_response(self, response):
         self.wfile.write(response.assemble())
@@ -453,8 +510,9 @@ class ProxyHandler(SocketServer.StreamRequestHandler):
         try:
             import BaseHTTPServer
             response = BaseHTTPServer.BaseHTTPRequestHandler.responses[code][0]
-            self.wfile.write("HTTP/1.0 %s %s\r\n" % (code, response))
+            self.wfile.write("HTTP/1.1 %s %s\r\n" % (code, response))
             self.wfile.write("Server: %s\r\n"%NAME)
+            self.wfile.write("Connection: close\r\n")
             self.wfile.write("Content-type: text/html\r\n")
             self.wfile.write("\r\n")
             self.wfile.write('<html><head>\n<title>%d %s</title>\n</head>\n'
