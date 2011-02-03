@@ -68,10 +68,9 @@ class PlaybackMaster(controller.Master):
         print >> sys.stderr, "  f(orward)    forward the request to the requested server and cache response"
         command = raw_input("Action: ")
         command = command[:1]
-        do_global = command.isupper()
         if command == 'q':
-            request.kill = True
             self.shutdown()
+            return None
         elif command == 'a' or command == 'A':
             filt = raw_input("Filter: ")
             search = raw_input("Search pattern: ")
@@ -82,14 +81,12 @@ class PlaybackMaster(controller.Master):
         elif command == 'e':
             return proxy.Response(request, "404", "Not found", utils.Headers(), "Not found")
         elif command == 'k':
-            request.kill = True
+            return None
         elif command == 'f':
             return request
         else:
             print >> sys.stderr, "ERROR: Unknown command"
             return self.process_missing_response(request)
-        if request.kill:
-            return request
         try:
             response = self.store.get_response(request)
             if command == 'a':
