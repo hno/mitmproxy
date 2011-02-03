@@ -13,7 +13,14 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-import re, os, subprocess, errno
+import re, os, subprocess, errno, datetime
+from contrib import BeautifulSoup
+
+
+def format_timestamp(s):
+    d = datetime.datetime.fromtimestamp(s)
+    return d.strftime("%Y-%m-%d %H:%M:%S")
+
 
 def isBin(s):
     """
@@ -40,6 +47,16 @@ def cleanBin(s):
             parts.append(".")
     return "".join(parts)
     
+
+def prettybody(s):
+    """
+        Return a list of pretty-printed lines.
+    """
+    s = BeautifulSoup.BeautifulStoneSoup(s)
+    s = s.prettify().strip()
+    parts = s.split("\n")
+    return [repr(i)[1:-1] for i in parts]
+
 
 def hexdump(s):
     """
@@ -162,6 +179,16 @@ class MultiDict:
         for i in self.keys():
             for j in self[i]:
                 yield (i, j)
+
+    def get_state(self):
+        return list(self.itemPairs())
+
+    @classmethod
+    def from_state(klass, state):
+        md = klass()
+        for i in state:
+            md.append(*i)
+        return md
 
 
 class Headers(MultiDict):

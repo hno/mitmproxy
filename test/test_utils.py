@@ -1,6 +1,11 @@
-import textwrap, cStringIO, os
+import textwrap, cStringIO, os, time
 import libpry
 from libmproxy import utils
+
+
+class uformat_timestamp(libpry.AutoTree):
+    def test_simple(self):
+        assert utils.format_timestamp(time.time())
 
 
 class uisBin(libpry.AutoTree):
@@ -102,6 +107,14 @@ class uMultiDict(libpry.AutoTree):
         assert ("foo", 2) in l
         assert ("bar", 3) in l
 
+    def test_getset_state(self):
+        self.md.append("foo", 1)
+        self.md.append("foo", 2)
+        self.md.append("bar", 3)
+        state = self.md.get_state()
+        nd = utils.MultiDict.from_state(state)
+        assert nd == self.md
+
 
 class uHeaders(libpry.AutoTree):
     def setUp(self):
@@ -176,6 +189,13 @@ class uHeaders(libpry.AutoTree):
         assert h.match_re("two: due")
         assert not h.match_re("nonono")
 
+    def test_getset_state(self):
+        self.hd.append("foo", 1)
+        self.hd.append("foo", 2)
+        self.hd.append("bar", 3)
+        state = self.hd.get_state()
+        nd = utils.Headers.from_state(state)
+        assert nd == self.hd
 
 
 class uisStringLike(libpry.AutoTree):
@@ -207,8 +227,19 @@ class umake_bogus_cert(libpry.AutoTree):
         assert "PRIVATE KEY" in d
         assert "CERTIFICATE" in d
 
+
+class uprettybody(libpry.AutoTree):
+    def test_all(self):
+        s = "<html><p></p></html>"
+        assert utils.prettybody(s)
+
+        s = "".join([chr(i) for i in range(256)])
+        assert utils.prettybody(s)
+
+
     
 tests = [
+    uformat_timestamp(),
     umake_bogus_cert(),
     uisBin(),
     uhexdump(),
@@ -218,4 +249,5 @@ tests = [
     uMultiDict(),
     uHeaders(),
     uData(),
+    uprettybody(),
 ]
