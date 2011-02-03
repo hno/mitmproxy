@@ -118,6 +118,7 @@ def parse_request_line(request):
 
 class Request(controller.Msg):
     FMT = '%s %s HTTP/1.1\r\n%s\r\n%s'
+    FMT_PROXY = '%s %s://%s:%s%s HTTP/1.1\r\n%s\r\n%s'
     def __init__(self, client_conn, host, port, scheme, method, path, headers, content, timestamp=None):
         self.client_conn = client_conn
         self.host, self.port, self.scheme = host, port, scheme
@@ -185,7 +186,10 @@ class Request(controller.Msg):
     def short(self):
         return "%s %s"%(self.method, self.url())
 
-    def assemble(self):
+    def assemble_proxy(self):
+	return self.assemble(True)
+
+    def assemble(self, _proxy = False):
         """
             Assembles the request for transmission to the server. We make some
             modifications to make sure interception works properly.
@@ -205,8 +209,10 @@ class Request(controller.Msg):
         else:
             content = ""
         headers["connection"] = ["close"]
-        data = (self.method, self.path, str(headers), content)
-        return self.FMT%data
+	if not _proxy:
+	    return self.FMT % (self.method, self.path, str(headers), content)
+	else:
+	    return self.FMT_PROXY % (self.method, self.scheme, self.host, self.port, self.path, str(headers), content)
 
 
 class Response(controller.Msg):
