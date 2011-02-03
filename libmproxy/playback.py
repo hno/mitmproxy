@@ -57,39 +57,61 @@ class RecordMaster(controller.Master):
             self.shutdown()
 
     def process_missing_response(self, request):
-	response = None
-	print >> sys.stderr, request.assemble()
-	print >> sys.stderr, "Actions:"
-	print >> sys.stderr, "  q  Quit"
-	print >> sys.stderr, "  u(rl)           search-replace on the URL"
-	print >> sys.stderr, "  c(ookie)        search-replace in cookies"
-	print >> sys.stderr, "  h(header)       search-replace in whole request header"
-	print >> sys.stderr, "  s(static)       mark URL as static, returning previous response"
-	print >> sys.stderr, "  e(rror)         respond with a 404 error"
-	print >> sys.stderr, "  k(ill)          kill the request, empty response"
-	print >> sys.stderr, "  Use capital letters (C, H) to apply the command on every following request, not just this URL"
-	command = raw_input("Action: ")
-	if command.startswith('q'):
-	    self.shutdown()
-	if response is not None:
-	    return response
-	else:
-	    request.kill = True
+        response = None
+        print >> sys.stderr, request.assemble()
+        print >> sys.stderr, "Actions:"
+        print >> sys.stderr, "  q  Quit"
+        print >> sys.stderr, "  u(rl)           search-replace on the URL query parameters including ?"
+        print >> sys.stderr, "  c(ookie)        search-replace in cookies"
+        print >> sys.stderr, "  h(header)       search-replace in whole request header"
+        print >> sys.stderr, "  s(static)       mark URL as static, returning previous response"
+        print >> sys.stderr, "  e(rror)         respond with a 404 error"
+        print >> sys.stderr, "  k(ill)          kill the request, empty response"
+        print >> sys.stderr, "  f(orward)       forward the request to the requested server and cache response"
+        print >> sys.stderr, "  Use capital letters (C, H) to apply the command on every following request, not just this URL"
+        command = raw_input("Action: ")
+        command = command[:1]
+        do_global = command.isupper()
+        command = command.lower()
+        if command == 'q':
+            request.kill = True
+            self.shutdown()
+        elif command == 'u' or command == 'c' or command == 'h':
+            search = raw_input("Search regex: ")
+            replace = raw_input("Replacement: ")
+            print >> sys.stderr, "NOTICE: Not yet implemented"
+        elif command == 's':
+            print >> sys.stderr, "NOTICE: Not yet implemented"
+            pass
+        elif command == 'k':
+            request.kill = True
+	elif command == 'f':
 	    return request
+        else:
+            print >> sys.stderr, "ERROR: Unknown command"
+            return self.process_missing_response(request)
+	if request.kill:
+	    return request
+        try:
+            response = self.store.get_response(request)
+        except IOError:
+            print >> sys.stderr, "NOTICE: Response still not found"
+            response = self.process_missing_response(request)
+        return response
 
     def handle_request(self, msg):
         request = msg
         try:
-	    response = self.store.get_response(request)
+            response = self.store.get_response(request)
         except IOError:
             if self.verbosity > 0:
                 print >> sys.stderr, ">>",
                 print >> sys.stderr, request.short()
                 print >> sys.stderr, "<<",
-	    print >> sys.stderr, "ERROR: No matching response.",
-	    print >> sys.stderr, ",".join(self.store.cookies)
-	    response = self.process_missing_response(msg)
-	msg.ack(response)
+            print >> sys.stderr, "ERROR: No matching response.",
+            print >> sys.stderr, ",".join(self.store.cookies)
+            response = self.process_missing_response(msg)
+        msg.ack(response)
 
     def handle_response(self, msg):
         request = msg.request
@@ -99,4 +121,6 @@ class RecordMaster(controller.Master):
             print >> sys.stderr, request.short()
             print >> sys.stderr, "<<",
             print >> sys.stderr, response.short()
+	if not response.is_cached():
+	    self.store.save_response(response)
         msg.ack(self.store.filter_response(msg))

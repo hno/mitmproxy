@@ -154,6 +154,9 @@ class Request(controller.Msg):
     def __eq__(self, other):
         return self.get_state() == other.get_state()
 
+    def is_cached(self):
+	return False
+
     def copy(self):
         c = copy.copy(self)
         c.headers = self.headers.copy()
@@ -213,6 +216,7 @@ class Response(controller.Msg):
         self.code, self.proto, self.msg = code, proto, msg
         self.headers, self.content = headers, content
         self.timestamp = timestamp or time.time()
+	self.cached = False
         controller.Msg.__init__(self)
 
     def get_state(self):
@@ -247,6 +251,9 @@ class Response(controller.Msg):
 
     def is_response(self):
         return True
+
+    def is_cached(self):
+	return self.cached
 
     def short(self):
         return "%s %s"%(self.code, self.proto)
