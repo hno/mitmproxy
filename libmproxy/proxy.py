@@ -286,7 +286,7 @@ class Response(controller.Msg):
             headers["content-length"] = [str(len(content))]
         else:
             content = ""
-        if self.request.connection.close:
+        if self.request.client_conn.close:
             headers["connection"] = ["close"]
         proto = "HTTP/1.1 %s %s"%(self.code, self.msg)
         data = (proto, str(headers), content)

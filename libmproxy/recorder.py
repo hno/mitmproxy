@@ -182,7 +182,7 @@ class Recorder:
             content = None
         else:
             content = fp.read()
-        return proxy.Request(request.connection, host, port, scheme, method, path, headers, content)
+        return proxy.Request(request.client_conn, host, port, scheme, method, path, headers, content)
 
     def open(self, path, mode):
         return open(self.storedir + "/" + path, mode)
