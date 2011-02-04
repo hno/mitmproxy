@@ -123,8 +123,8 @@ def parse_request_line(request):
 class Request(controller.Msg):
     FMT = '%s %s HTTP/1.1\r\n%s\r\n%s'
     FMT_PROXY = '%s %s://%s:%s%s HTTP/1.1\r\n%s\r\n%s'
-    def __init__(self, connection, host, port, scheme, method, path, headers, content, timestamp=None):
-        self.client_conn = connection
+    def __init__(self, client_conn, host, port, scheme, method, path, headers, content, timestamp=None):
+        self.client_conn = client_conn
         self.host, self.port, self.scheme = host, port, scheme
         self.method, self.path, self.headers, self.content = method, path, headers, content
         self.close = False
