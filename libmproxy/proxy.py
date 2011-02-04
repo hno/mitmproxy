@@ -30,7 +30,7 @@ def read_chunked(fp):
     content = ""
     while 1:
         line = fp.readline()
-        if not line:
+        if line == "":
             raise IOError("Connection closed")
         if line == '\r\n' or line == '\n':
             continue
@@ -38,23 +38,27 @@ def read_chunked(fp):
         if not length:
             break
         content += fp.read(length)
+	line = fp.readline()
+        if line != '\r\n':
+            raise IOError("Malformed chunked body")
     while 1:
         line = fp.readline()
-        if not line:
+        if line == "":
             raise IOError("Connection closed")
         if line == '\r\n' or line == '\n':
             break
     return content
     
-def read_http_body(fp, headers, all):
+def read_http_body(rfile, connection, headers, all):
     if headers.has_key('transfer-encoding'):
         if not ",".join(headers["transfer-encoding"]) == "chunked":
             raise IOError('Invalid transfer-encoding')
-        content = read_chunked(fp)
+        content = read_chunked(rfile)
     elif headers.has_key("content-length"):
-        content = fp.read(int(headers["content-length"][0]))
+        content = rfile.read(int(headers["content-length"][0]))
     elif all:
-        content = fp.read()
+        content = rfile.read()
+	connection.close = True
     else:
         content = None
     return content
@@ -208,7 +212,8 @@ class Request(controller.Msg):
             headers["content-length"] = [str(len(content))]
         else:
             content = ""
-        headers["connection"] = ["close"]
+	if self.close:
+	    headers["connection"] = ["close"]
 	if not _proxy:
 	    return self.FMT % (self.method, self.path, str(headers), content)
 	else:
@@ -217,9 +222,9 @@ class Request(controller.Msg):
 
 class Response(controller.Msg):
     FMT = '%s\r\n%s\r\n%s'
-    def __init__(self, request, code, proto, msg, headers, content, timestamp=None):
+    def __init__(self, request, code, msg, headers, content, timestamp=None):
         self.request = request
-        self.code, self.proto, self.msg = code, proto, msg
+        self.code, self.msg = code, msg
         self.headers, self.content = headers, content
         self.timestamp = timestamp or time.time()
 	self.cached = False
@@ -262,7 +267,7 @@ class Response(controller.Msg):
 	return self.cached
 
     def short(self):
-        return "%s %s"%(self.code, self.proto)
+        return "%s %s"%(self.code, self.msg)
 
     def assemble(self):
         """
@@ -280,8 +285,9 @@ class Response(controller.Msg):
             headers["content-length"] = [str(len(content))]
         else:
             content = ""
-        headers["connection"] = ["close"]
-        proto = "%s %s %s"%(self.proto, self.code, self.msg)
+	if self.request.connection.close:
+            headers["connection"] = ["close"]
+        proto = "HTTP/1.1 %s %s"%(self.code, self.msg)
         data = (proto, str(headers), content)
         return self.FMT%data
 
@@ -293,6 +299,7 @@ class ClientConnection(controller.Msg):
             been replayed from within mitmproxy.
         """
         self.address = address
+	self.close = False
         controller.Msg.__init__(self)
 
     def set_replay(self):
@@ -372,9 +379,9 @@ class FileLike:
 class ServerConnection:
     def __init__(self, request):
         self.request = request
+	self.close = False
         self.server, self.rfile, self.wfile = None, None, None
         self.connect()
-        self.send_request()
 
     def connect(self):
         try:
@@ -388,18 +395,21 @@ class ServerConnection:
         self.server = server
         self.rfile, self.wfile = server.makefile('rb'), server.makefile('wb')
 
-    def send_request(self):
+    def send_request(self, request):
         try:
-            self.wfile.write(self.request.assemble())
+	    request.close = self.close
+            self.wfile.write(request.assemble())
             self.wfile.flush()
         except socket.error, err:
             raise ProxyError(500, 'Error sending data to "%s": %s' % (request.host, err))
 
     def read_response(self):
-        proto = self.rfile.readline()
-        if not proto:
-            raise ProxyError(200, "Blank server response.")
-        parts = proto.strip().split(" ", 2)
+        line = self.rfile.readline()
+	if line == "\r\n" or line == "\n": # Possible leftover from previous message
+	    line = self.rfile.readline()
+        if not line:
+            raise ProxyError(502, "Blank server response.")
+	parts = line.strip().split(" ", 2)
         if not len(parts) == 3:
             raise ProxyError(502, "Invalid server response: %s."%proto)
         proto, code, msg = parts
@@ -411,8 +421,8 @@ class ServerConnection:
         if self.request.method == "HEAD" or code == 204 or code == 304:
             content = None
         else:
-            content = read_http_body(self.rfile, headers, True)
-        return Response(self.request, code, proto, msg, headers, content)
+            content = read_http_body(self.rfile, self, headers, True)
+        return Response(self.request, code, msg, headers, content)
 
     def terminate(self):
         try:
@@ -429,27 +439,37 @@ class ProxyHandler(SocketServer.StreamRequestHandler):
         SocketServer.StreamRequestHandler.__init__(self, request, client_address, server)
 
     def handle(self):
-        server = None
         cc = ClientConnection(self.client_address)
         cc.send(self.mqueue)
+	while not cc.close:
+	    self.handle_request(cc)
+	self.finish()
+
+    def handle_request(self, cc):
+        server = None
         try:
             request = self.read_request(cc)
+	    if request is None:
+		cc.close = True
+		return
             request = request.send(self.mqueue)
             if request is None:
-                self.finish()
-                return
+		cc.close = True
+		return
             if request.is_response():
                 response = request
                 request = False
                 response = response.send(self.mqueue)
             else:
                 server = ServerConnection(request)
+		server.close = True
+		server.send_request(request)
                 response = server.read_response()
                 response = response.send(self.mqueue)
                 if response is None:
                     server.terminate()
             if response is None:
-                self.finish()
+		cc.close = True
                 return
             self.send_response(response)
         except IOError:
@@ -460,11 +480,14 @@ class ProxyHandler(SocketServer.StreamRequestHandler):
             self.send_error(e.code, e.msg)
         if server:
             server.terminate()
-        self.finish()
 
     def read_request(self, client_conn):
-        request = self.rfile.readline()
-        method, scheme, host, port, path, httpminor = parse_request_line(request)
+        line = self.rfile.readline()
+	if line == "\r\n" or line == "\n": # Possible leftover from previous message
+	    line = self.rfile.readline()
+	if line == "":
+	    return None
+        method, scheme, host, port, path, httpminor = parse_request_line(line)
         if method == "CONNECT":
             # Discard additional headers sent to the proxy. Should I expose
             # these to users?
@@ -514,8 +537,17 @@ class ProxyHandler(SocketServer.StreamRequestHandler):
                 del headers['expect']
             else:
                 raise ProxyError(417, 'Unmet expect: %s'%expect)
-        content = read_http_body(self.rfile, headers, False)
-        return Request(connection, host, port, scheme, method, path, headers, content)
+	if httpminor == 0:
+	    client_conn.close = True
+	if headers.has_key('connection'):
+	    for value in ",".join(headers['connection']).split(","):
+		value = value.strip()
+		if value == "close":
+		    client_conn.close = True
+		if value == "keep-alive":
+		    client_conn.close = False
+        content = read_http_body(self.rfile, client_conn, headers, False)
+        return Request(client_conn, host, port, scheme, method, path, headers, content)
 
     def send_response(self, response):
         self.wfile.write(response.assemble())
