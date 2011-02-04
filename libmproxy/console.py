@@ -722,11 +722,14 @@ class ConsoleState(flow.State):
 
     def add_response(self, resp):
 	if self.store is not None:
-	    self.store.save_response(msg)
+	    self.store.save_response(resp)
         f = flow.State.add_response(self, resp)
         if self.focus is None:
             self.set_focus(0)
         return f
+
+    def start_recording(self, recorder):
+        self.store = recorder
 
     def set_limit(self, limit):
         ret = flow.State.set_limit(self, limit)
@@ -811,8 +814,9 @@ class ConsoleMaster(controller.Master):
         self.stickycookie = None
         self.stickyhosts = {}
 
-	if options.store is not None:
-	    self.store = recorder.Recorder(options)
+	if options.cache is not None:
+	    self.state.start_recording(recorder.Recorder(options))
+
 
     def spawn_external_viewer(self, data, contenttype):
         if contenttype:
