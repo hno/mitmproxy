@@ -414,8 +414,8 @@ class ConnectionView(WWrap):
         response = self.flow.response
         response.code = code
         import BaseHTTPServer
-	if BaseHTTPServer.BaseHTTPRequestHandler.responses.has_key(int(code)):
-	    response.msg = BaseHTTPServer.BaseHTTPRequestHandler.responses[int(code)][0]
+        if BaseHTTPServer.BaseHTTPRequestHandler.responses.has_key(int(code)):
+            response.msg = BaseHTTPServer.BaseHTTPRequestHandler.responses[int(code)][0]
         self.master.refresh_connection(self.flow)
 
     def set_resp_msg(self, msg):
@@ -701,7 +701,7 @@ class ConsoleState(flow.State):
         flow.State.__init__(self)
         self.focus = None
         self.beep = None
-	self.store = None
+        self.store = None
 
         self.view_body_mode = VIEW_BODY_RAW
         self.view_flow_mode = VIEW_FLOW_REQUEST
@@ -722,8 +722,8 @@ class ConsoleState(flow.State):
         return flow.State.add_request(self, req)
 
     def add_response(self, resp):
-	if self.store is not None:
-	    self.store.save_response(resp)
+        if self.store is not None:
+            self.store.save_response(resp)
         f = flow.State.add_response(self, resp)
         if self.focus is None:
             self.set_focus(0)
@@ -815,8 +815,8 @@ class ConsoleMaster(controller.Master):
         self.stickycookie = None
         self.stickyhosts = {}
 
-	if options.cache is not None:
-	    self.state.start_recording(recorder.Recorder(options))
+        if options.cache is not None:
+            self.state.start_recording(recorder.Recorder(options))
 
 
     def spawn_external_viewer(self, data, contenttype):

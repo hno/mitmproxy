@@ -76,9 +76,9 @@ class PlaybackMaster(controller.Master):
             filt = raw_input("Filter: ")
             search = raw_input("Search pattern: ")
             replace = raw_input("Replacement string: ")
-	    self.store.add_rule(filt, search, replace)
-	    if command == 'A':
-		self.store.save_rule(filt, search, replace)
+            self.store.add_rule(filt, search, replace)
+            if command == 'A':
+                self.store.save_rule(filt, search, replace)
         elif command == 'k':
             request.kill = True
         elif command == 'f':
@@ -90,13 +90,13 @@ class PlaybackMaster(controller.Master):
             return request
         try:
             response = self.store.get_response(request)
-	    if command == 'a':
-		self.store.save_rule(filt, search, replace)
+            if command == 'a':
+                self.store.save_rule(filt, search, replace)
         except IOError:
             print >> sys.stderr, "NOTICE: Response still not found"
             response = self.process_missing_response(request)
-	    if command == 'a':
-		self.store.forget_last_rule()
+            if command == 'a':
+                self.store.forget_last_rule()
         return response
 
     def handle_request(self, msg):

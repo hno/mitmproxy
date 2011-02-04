@@ -38,7 +38,7 @@ def read_chunked(fp):
         if not length:
             break
         content += fp.read(length)
-	line = fp.readline()
+        line = fp.readline()
         if line != '\r\n':
             raise IOError("Malformed chunked body")
     while 1:
@@ -58,7 +58,7 @@ def read_http_body(rfile, connection, headers, all):
         content = rfile.read(int(headers["content-length"][0]))
     elif all:
         content = rfile.read()
-	connection.close = True
+        connection.close = True
     else:
         content = None
     return content
@@ -160,7 +160,7 @@ class Request(controller.Msg):
         return self.get_state() == other.get_state()
 
     def is_cached(self):
-	return False
+        return False
 
     def copy(self):
         c = copy.copy(self)
@@ -191,7 +191,7 @@ class Request(controller.Msg):
         return "%s %s"%(self.method, self.url())
 
     def assemble_proxy(self):
-	return self.assemble(True)
+        return self.assemble(True)
 
     def assemble(self, _proxy = False):
         """
@@ -212,12 +212,12 @@ class Request(controller.Msg):
             headers["content-length"] = [str(len(content))]
         else:
             content = ""
-	if self.close:
-	    headers["connection"] = ["close"]
-	if not _proxy:
-	    return self.FMT % (self.method, self.path, str(headers), content)
-	else:
-	    return self.FMT_PROXY % (self.method, self.scheme, self.host, self.port, self.path, str(headers), content)
+        if self.close:
+            headers["connection"] = ["close"]
+        if not _proxy:
+            return self.FMT % (self.method, self.path, str(headers), content)
+        else:
+            return self.FMT_PROXY % (self.method, self.scheme, self.host, self.port, self.path, str(headers), content)
 
 
 class Response(controller.Msg):
@@ -227,7 +227,7 @@ class Response(controller.Msg):
         self.code, self.msg = code, msg
         self.headers, self.content = headers, content
         self.timestamp = timestamp or time.time()
-	self.cached = False
+        self.cached = False
         controller.Msg.__init__(self)
 
     def get_state(self):
@@ -264,7 +264,7 @@ class Response(controller.Msg):
         return True
 
     def is_cached(self):
-	return self.cached
+        return self.cached
 
     def short(self):
         return "%s %s"%(self.code, self.msg)
@@ -285,7 +285,7 @@ class Response(controller.Msg):
             headers["content-length"] = [str(len(content))]
         else:
             content = ""
-	if self.request.connection.close:
+        if self.request.connection.close:
             headers["connection"] = ["close"]
         proto = "HTTP/1.1 %s %s"%(self.code, self.msg)
         data = (proto, str(headers), content)
@@ -299,7 +299,7 @@ class ClientConnection(controller.Msg):
             been replayed from within mitmproxy.
         """
         self.address = address
-	self.close = False
+        self.close = False
         controller.Msg.__init__(self)
 
     def set_replay(self):
@@ -379,7 +379,7 @@ class FileLike:
 class ServerConnection:
     def __init__(self, request):
         self.request = request
-	self.close = False
+        self.close = False
         self.server, self.rfile, self.wfile = None, None, None
         self.connect()
 
@@ -397,7 +397,7 @@ class ServerConnection:
 
     def send_request(self, request):
         try:
-	    request.close = self.close
+            request.close = self.close
             self.wfile.write(request.assemble())
             self.wfile.flush()
         except socket.error, err:
@@ -405,11 +405,11 @@ class ServerConnection:
 
     def read_response(self):
         line = self.rfile.readline()
-	if line == "\r\n" or line == "\n": # Possible leftover from previous message
-	    line = self.rfile.readline()
+        if line == "\r\n" or line == "\n": # Possible leftover from previous message
+            line = self.rfile.readline()
         if not line:
             raise ProxyError(502, "Blank server response.")
-	parts = line.strip().split(" ", 2)
+        parts = line.strip().split(" ", 2)
         if not len(parts) == 3:
             raise ProxyError(502, "Invalid server response: %s."%proto)
         proto, code, msg = parts
@@ -441,35 +441,35 @@ class ProxyHandler(SocketServer.StreamRequestHandler):
     def handle(self):
         cc = ClientConnection(self.client_address)
         cc.send(self.mqueue)
-	while not cc.close:
-	    self.handle_request(cc)
-	self.finish()
+        while not cc.close:
+            self.handle_request(cc)
+        self.finish()
 
     def handle_request(self, cc):
         server = None
         try:
             request = self.read_request(cc)
-	    if request is None:
-		cc.close = True
-		return
+            if request is None:
+                cc.close = True
+                return
             request = request.send(self.mqueue)
             if request is None:
-		cc.close = True
-		return
+                cc.close = True
+                return
             if request.is_response():
                 response = request
                 request = False
                 response = response.send(self.mqueue)
             else:
                 server = ServerConnection(request)
-		server.close = True
-		server.send_request(request)
+                server.close = True
+                server.send_request(request)
                 response = server.read_response()
                 response = response.send(self.mqueue)
                 if response is None:
                     server.terminate()
             if response is None:
-		cc.close = True
+                cc.close = True
                 return
             self.send_response(response)
         except IOError:
@@ -483,10 +483,10 @@ class ProxyHandler(SocketServer.StreamRequestHandler):
 
     def read_request(self, client_conn):
         line = self.rfile.readline()
-	if line == "\r\n" or line == "\n": # Possible leftover from previous message
-	    line = self.rfile.readline()
-	if line == "":
-	    return None
+        if line == "\r\n" or line == "\n": # Possible leftover from previous message
+            line = self.rfile.readline()
+        if line == "":
+            return None
         method, scheme, host, port, path, httpminor = parse_request_line(line)
         if method == "CONNECT":
             # Discard additional headers sent to the proxy. Should I expose
@@ -537,15 +537,15 @@ class ProxyHandler(SocketServer.StreamRequestHandler):
                 del headers['expect']
             else:
                 raise ProxyError(417, 'Unmet expect: %s'%expect)
-	if httpminor == 0:
-	    client_conn.close = True
-	if headers.has_key('connection'):
-	    for value in ",".join(headers['connection']).split(","):
-		value = value.strip()
-		if value == "close":
-		    client_conn.close = True
-		if value == "keep-alive":
-		    client_conn.close = False
+        if httpminor == 0:
+            client_conn.close = True
+        if headers.has_key('connection'):
+            for value in ",".join(headers['connection']).split(","):
+                value = value.strip()
+                if value == "close":
+                    client_conn.close = True
+                if value == "keep-alive":
+                    client_conn.close = False
         content = read_http_body(self.rfile, client_conn, headers, False)
         return Request(client_conn, host, port, scheme, method, path, headers, content)
 
