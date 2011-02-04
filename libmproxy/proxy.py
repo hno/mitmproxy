@@ -576,7 +576,7 @@ class ProxyHandler(SocketServer.StreamRequestHandler):
             response = BaseHTTPServer.BaseHTTPRequestHandler.responses[code][0]
             self.wfile.write("HTTP/1.1 %s %s\r\n" % (code, response))
             self.wfile.write("Server: %s\r\n"%NAME)
-            self.wfile.write("Connection: closes\r\n")
+            self.wfile.write("Connection: close\r\n")
             self.wfile.write("Content-type: text/html\r\n")
             self.wfile.write("\r\n")
             self.wfile.write('<html><head>\n<title>%d %s</title>\n</head>\n'
