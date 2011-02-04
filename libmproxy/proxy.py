@@ -459,7 +459,6 @@ class ProxyHandler(SocketServer.StreamRequestHandler):
             request = request.send(self.mqueue)
             if request is None:
                 cc.close = True
-                #self.finish()
                 return
             if request.is_response():
                 response = request
@@ -474,7 +473,6 @@ class ProxyHandler(SocketServer.StreamRequestHandler):
                     server.terminate()
             if response is None:
                 cc.close = True
-                #self.finish()
                 return
             self.send_response(response)
         except IOError:
