@@ -729,13 +729,13 @@ class ConsoleState(flow.State):
             self.set_focus(0)
         return f
 
-    def start_recording(self, recorder):
-        self.store = recorder
-
     def set_limit(self, limit):
         ret = flow.State.set_limit(self, limit)
         self.set_focus(self.focus)
         return ret
+
+    def start_recording(self, recorder):
+        self.store = recorder
 
     def get_focus(self):
         if not self.view or self.focus is None:
