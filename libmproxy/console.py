@@ -818,7 +818,6 @@ class ConsoleMaster(controller.Master):
         if options.cache is not None:
             self.state.start_recording(recorder.Recorder(options))
 
-
     def spawn_external_viewer(self, data, contenttype):
         if contenttype:
             ext = mimetypes.guess_extension(contenttype) or ""
