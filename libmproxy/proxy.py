@@ -128,6 +128,7 @@ class Request(controller.Msg):
         self.host, self.port, self.scheme = host, port, scheme
         self.method, self.path, self.headers, self.content = method, path, headers, content
         self.timestamp = timestamp or time.time()
+        self.close = False
         controller.Msg.__init__(self)
 
     def get_state(self):
@@ -212,7 +213,8 @@ class Request(controller.Msg):
             headers["content-length"] = [str(len(content))]
         else:
             content = ""
-        headers["connection"] = ["close"]
+        if self.close:
+            headers["connection"] = ["close"]
         if not _proxy:
             return self.FMT % (self.method, self.path, str(headers), content)
         else:
@@ -380,6 +382,7 @@ class ServerConnection:
         self.host = request.host
         self.port = request.port
         self.scheme = request.scheme
+        self.close = False
         self.server, self.rfile, self.wfile = None, None, None
         self.connect()
 
@@ -397,6 +400,7 @@ class ServerConnection:
 
     def send_request(self, request):
         self.request = request
+        request.close = self.close
         try:
             self.wfile.write(request.assemble())
             self.wfile.flush()
@@ -583,6 +587,7 @@ class ProxyHandler(SocketServer.StreamRequestHandler):
 
 
 ServerBase = SocketServer.ThreadingTCPServer
+ServerBase.daemon_threads = True	# Terminate workers when main thread terminates
 class ProxyServer(ServerBase):
     request_queue_size = 20
     allow_reuse_address = True
