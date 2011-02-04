@@ -127,8 +127,8 @@ class Request(controller.Msg):
         self.client_conn = client_conn
         self.host, self.port, self.scheme = host, port, scheme
         self.method, self.path, self.headers, self.content = method, path, headers, content
-        self.close = False
         self.timestamp = timestamp or time.time()
+        self.close = False
         controller.Msg.__init__(self)
 
     def is_cached(self):
@@ -227,8 +227,8 @@ class Response(controller.Msg):
         self.request = request
         self.code, self.msg = code, msg
         self.headers, self.content = headers, content
-        self.cached = False
         self.timestamp = timestamp or time.time()
+        self.cached = False
         controller.Msg.__init__(self)
 
     def get_state(self):
