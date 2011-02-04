@@ -415,7 +415,7 @@ class ServerConnection:
             raise ProxyError(502, "Blank server response.")
         parts = line.strip().split(" ", 2)
         if not len(parts) == 3:
-            raise ProxyError(502, "Invalid server response: %s."%proto)
+            raise ProxyError(502, "Invalid server response: %s."%line)
         proto, code, msg = parts
         code = int(code)
         headers = utils.Headers()
