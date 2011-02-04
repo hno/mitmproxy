@@ -131,6 +131,9 @@ class Request(controller.Msg):
         self.close = False
         controller.Msg.__init__(self)
 
+    def is_cached(self):
+        return False
+
     def get_state(self):
         return dict(
             host = self.host,
@@ -159,9 +162,6 @@ class Request(controller.Msg):
 
     def __eq__(self, other):
         return self.get_state() == other.get_state()
-
-    def is_cached(self):
-        return False
 
     def copy(self):
         c = copy.copy(self)
