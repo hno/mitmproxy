@@ -446,7 +446,7 @@ class ConnectionView(WWrap):
             self.master.prompt_edit("Code", conn.code, self.set_resp_code)
         elif part == "m" and self.state.view_flow_mode == VIEW_FLOW_RESPONSE:
             self.master.prompt_edit("Message", conn.msg, self.set_resp_msg)
-        elif part == "r" and self.state.view_flow_mode == VIEW_FLOW_RESPONSE:
+        elif part == "r" and self.state.view_flow_mode == VIEW_FLOW_REQUEST:
             if not conn.acked:
                 response = proxy.Response(conn, "200", "OK", utils.Headers(), "")
                 conn.ack(response)
