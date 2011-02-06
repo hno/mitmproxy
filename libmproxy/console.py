@@ -308,7 +308,7 @@ class ConnectionView(WWrap):
             ])
 
     def _view_pretty(self, conn, txt):
-        for i in utils.prettybody(conn.content):
+        for i in utils.pretty_xmlish(conn.content):
             txt.append(
                 ("text", i),
             )
@@ -659,7 +659,14 @@ class StatusBar(WWrap):
         if self.expire and time.time() > self.expire:
             self.message("")
         status = urwid.Columns([
-            urwid.Text([('title', "mproxy:%s"%self.master.server.port)]),
+            urwid.Text(
+                [
+                    (
+                        'title',
+                        "mitmproxy %s:%s"%(self.master.server.address, self.master.server.port)
+                    )
+                ]
+            ),
             urwid.Text(
                 [
                     self.text,

@@ -147,9 +147,9 @@ class Request(controller.Msg):
         )
 
     @classmethod
-    def from_state(klass, state):
+    def from_state(klass, client_conn, state):
         return klass(
-            ClientConnection(None),
+            client_conn,
             state["host"],
             state["port"],
             state["scheme"],
@@ -302,6 +302,13 @@ class ClientConnection(controller.Msg):
         self.address = address
         self.close = False
         controller.Msg.__init__(self)
+
+    def get_state(self):
+        return self.address
+
+    @classmethod
+    def from_state(klass, state):
+        return klass(state)
 
     def set_replay(self):
         self.address = None
@@ -591,9 +598,9 @@ ServerBase.daemon_threads = True	# Terminate workers when main thread terminates
 class ProxyServer(ServerBase):
     request_queue_size = 20
     allow_reuse_address = True
-    def __init__(self, port):
-        self.port = port
-        ServerBase.__init__(self, ('', port), ProxyHandler)
+    def __init__(self, port, address=''):
+        self.port, self.address = port, address
+        ServerBase.__init__(self, (address, port), ProxyHandler)
         self.masterq = None
 
     def set_mqueue(self, q):
