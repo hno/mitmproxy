@@ -32,6 +32,11 @@ if __name__ == '__main__':
         help = "SSL certificate file."
     )
     parser.add_option(
+        "--certpath", action="store",
+        type = "str", dest="certpath", default="~/.mitmproxy/",
+        help = "SSL certificate path."
+    )
+    parser.add_option(
         "--ciphers", action="store",
         type = "str", dest="ciphers", default=None,
         help = "SSL ciphers."
@@ -52,14 +57,15 @@ if __name__ == '__main__':
     if options.quiet:
         options.verbose = 0
 
-    certpath = os.path.expanduser(options.cert)
+    options.cert = os.path.expanduser(options.cert)
+    options.certpath = os.path.expanduser(options.certpath)
     
-    if not os.path.exists(certpath):
+    if not os.path.exists(options.cert):
         print >> sys.stderr, "Creating bogus certificate at %s"%options.cert
-        utils.make_bogus_cert(certpath)
+        utils.make_bogus_cert(options.cert)
 
     proxy.config = proxy.Config(
-        certpath,
+        certfile = options.cert,
         ciphers = options.ciphers
     )
     server = proxy.ProxyServer(options.port)
