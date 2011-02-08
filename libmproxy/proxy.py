@@ -522,8 +522,8 @@ class ProxyHandler(SocketServer.StreamRequestHandler):
             self.rfile = FileLike(self.connection)
             self.wfile = FileLike(self.connection)
             method, scheme, host, port, path, httpminor = parse_request_line(self.rfile.readline())
-            if scheme is None:
-                scheme = "https"
+        if scheme is None:
+            scheme = "https"
         headers = utils.Headers()
         headers.read(self.rfile)
         if host is None and headers.has_key("host"):
