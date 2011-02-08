@@ -598,7 +598,7 @@ class ProxyHandler(SocketServer.StreamRequestHandler):
 
 
 ServerBase = SocketServer.ThreadingTCPServer
-ServerBase.daemon_threads = True	# Terminate workers when main thread terminates
+ServerBase.daemon_threads = True        # Terminate workers when main thread terminates
 class ProxyServer(ServerBase):
     request_queue_size = 20
     allow_reuse_address = True
