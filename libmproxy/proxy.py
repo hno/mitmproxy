@@ -488,6 +488,7 @@ class ProxyHandler(SocketServer.StreamRequestHandler):
         except ProxyError, e:
             err = Error(cc, e.msg)
             err.send(self.mqueue)
+            cc.close = True
             self.send_error(e.code, e.msg)
         if server:
             server.terminate()
@@ -591,8 +592,6 @@ class ProxyHandler(SocketServer.StreamRequestHandler):
             self.wfile.write('<html><head>\n<title>%d %s</title>\n</head>\n'
                     '<body>\n%s\n</body>\n</html>' % (code, response, body))
             self.wfile.flush()
-            self.wfile.close()
-            self.rfile.close()
         except IOError:
             pass
 
