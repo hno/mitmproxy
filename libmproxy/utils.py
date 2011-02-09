@@ -314,7 +314,7 @@ class Data:
 data = Data(__name__)
 
 
-def make_bogus_cert(path):
+def make_bogus_ca_cert(path):
     # Generates a bogus certificate like so:
     # openssl req -config template -x509 -nodes -days 9999 -newkey rsa:1024 \
     # -keyout cert.pem -out cert.pem 
