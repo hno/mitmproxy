@@ -26,7 +26,7 @@ class Config:
         self.certfile = certfile
         self.certpath = certpath
         self.ciphers = ciphers
-        self.certpath = certpath
+        self.cacert = cacert
 
 
 def read_chunked(fp):
@@ -499,13 +499,18 @@ class ProxyHandler(SocketServer.StreamRequestHandler):
         #return config.certpath + "/" + host + ":" + port + ".pem"
         if config.certpath is not None:
             cert = config.certpath + "/" + host + ".pem"
+            if not os.path.exists(cert) and config.cacert is not None:
+                utils.make_bogus_cert(cert, ca=config.cacert, commonName=host)
             if os.path.exists(cert):
                 return cert
             print >> sys.stderr, "WARNING: Certificate missing for %s:%d! (%s)\n" % (host, port, cert)
         return config.certfile
 
     def find_key(self, host, port=443):
-        return config.certfile
+	if config.cacert is not None:
+	    return config.cacert
+	else:
+            return config.certfile
 
     def read_request(self, client_conn):
         line = self.rfile.readline()
