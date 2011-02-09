@@ -52,6 +52,7 @@ def read_chunked(fp):
             break
     return content
     
+
 def read_http_body(rfile, connection, headers, all):
     if headers.has_key('transfer-encoding'):
         if not ",".join(headers["transfer-encoding"]) == "chunked":
@@ -65,6 +66,7 @@ def read_http_body(rfile, connection, headers, all):
     else:
         content = None
     return content
+
 
 def parse_url(url):
     """
