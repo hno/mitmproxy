@@ -48,7 +48,7 @@ if __name__ == '__main__':
     parser.add_option(
         "--certpath", action="store",
         type = "str", dest="certpath", default="~/.mitmproxy/",
-        help = "SSL certificate path."
+        help = "SSL certificate store path."
     )
 
     parser.add_option(
