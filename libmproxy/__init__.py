@@ -1,1 +1,1 @@
-VERSION = "0.2-cache-6"
+VERSION = "0.2-cache-7"
