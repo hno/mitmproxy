@@ -270,7 +270,7 @@ class Recorder:
         except IOError:
             fp = self.open(path+".resp", 'r')
         server = RecorderConnection(request, fp)
-        fp = None	# Handed over to RecorderConnection
+        fp = None       # Handed over to RecorderConnection
         server.send_request(request)
         response = server.read_response()
         server.terminate()

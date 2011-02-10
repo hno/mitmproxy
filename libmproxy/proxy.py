@@ -509,9 +509,9 @@ class ProxyHandler(SocketServer.StreamRequestHandler):
         return config.certfile
 
     def find_key(self, host, port=443):
-	if config.cacert is not None:
-	    return config.cacert
-	else:
+        if config.cacert is not None:
+            return config.cacert
+        else:
             return config.certfile
 
     def read_request(self, client_conn):
