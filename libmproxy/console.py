@@ -45,16 +45,16 @@ def format_keyvals(lst, key="key", val="text", space=5, indent=0):
     return ret
 
 
-def format_flow(f, focus, extended=False, padding=3):
-    if not f.request and not f.response:
+def format_flow(f, focus, extended=False, padding=2):
+    if not f.request:
         txt = [
             ("title", " Connection from %s..."%(f.client_conn.address[0])),
         ]
     else:
         if extended:
-            ts = ("highlight", utils.format_timestamp(f.request.timestamp))
+            ts = ("highlight", utils.format_timestamp(f.request.timestamp) + " ")
         else:
-            ts = ""
+            ts = " "
 
         txt = [
             ts,
@@ -67,12 +67,11 @@ def format_flow(f, focus, extended=False, padding=3):
             ),
         ]
         if f.response or f.error or f.is_replay():
-
             tsr = f.response or f.error
             if extended and tsr:
-                ts = ("highlight", utils.format_timestamp(tsr.timestamp))
+                ts = ("highlight", utils.format_timestamp(tsr.timestamp) + " ")
             else:
-                ts = ""
+                ts = " "
 
             txt.append("\n") 
             txt.append(("text", ts))
@@ -104,6 +103,7 @@ def format_flow(f, focus, extended=False, padding=3):
             txt.append(
                ("error", f.error.msg)
             )
+
     if focus:
         txt.insert(0, ("focus", ">>" + " "*(padding-2)))
     else:
@@ -779,7 +779,7 @@ VIEW_CONNLIST = 0
 VIEW_FLOW = 1
 VIEW_HELP = 2
 
-class ConsoleMaster(controller.Master):
+class ConsoleMaster(flow.FlowMaster):
     palette = []
     footer_text_default = [
         ('key', "?"), ":help ",
@@ -794,10 +794,10 @@ class ConsoleMaster(controller.Master):
         ('key', "q"), ":back ",
     ]
     def __init__(self, server, options):
+        flow.FlowMaster.__init__(self, server, ConsoleState())
+
         self.conn_list_view = None
         self.set_palette()
-        controller.Master.__init__(self, server)
-        self.state = ConsoleState()
 
         r = self.set_limit(options.limit)
         if r:
@@ -918,6 +918,8 @@ class ConsoleMaster(controller.Master):
         self.make_view()
 
     def view_connlist(self):
+        if self.ui.s:
+            self.ui.clear()
         if self.currentflow:
             try:
                 idx = self.state.view.index(self.currentflow)
@@ -958,25 +960,25 @@ class ConsoleMaster(controller.Master):
     def view_prev_flow(self, flow):
         return self._view_nextprev_flow("prev", flow)
 
-    def _write_flows(self, path, data):
+    def _write_flows(self, path, flows):
+        self.state.last_saveload = path
         if not path:
             return 
         path = os.path.expanduser(path)
         try:
             f = file(path, "wb")
-            f.write(data)
+            fw = flow.FlowWriter(f)
+            for i in flows:
+                fw.add(i)
             f.close()
         except IOError, v:
             self.statusbar.message(v.strerror)
 
     def save_one_flow(self, path, flow):
-        data = flow.dump()
-        return self._write_flows(path, data)
+        return self._write_flows(path, [flow])
 
     def save_flows(self, path):
-        self.state.last_saveload = path
-        data = self.state.dump_flows()
-        return self._write_flows(path, data)
+        return self._write_flows(path, self.state.view)
 
     def load_flows(self, path):
         if not path:
@@ -985,7 +987,8 @@ class ConsoleMaster(controller.Master):
         path = os.path.expanduser(path)
         try:
             f = file(path, "r")
-            data = f.read()
+            fr = flow.FlowReader(f)
+            data = list(fr.stream())
             f.close()
         except IOError, v:
             return v.strerror
@@ -1312,23 +1315,18 @@ class ConsoleMaster(controller.Master):
 
     # Handlers
     def handle_clientconnection(self, r):
-        f = flow.Flow(r)
-        self.state.add_browserconnect(f)
-        r.ack()
-        self.sync_list_view()
+        f = flow.FlowMaster.handle_clientconnection(self, r)
+        if f:
+            self.sync_list_view()
 
     def handle_error(self, r):
-        f = self.state.add_error(r)
-        if not f:
-            r.ack()
-        else:
+        f = flow.FlowMaster.handle_error(self, r)
+        if f:
             self.process_flow(f, r)
 
     def handle_request(self, r):
-        f = self.state.add_request(r)
-        if not f:
-            r.ack()
-        else:
+        f = flow.FlowMaster.handle_request(self, r)
+        if f:
             if f.match(self.stickycookie):
                 hid = (f.request.host, f.request.port)
                 if f.request.headers.has_key("cookie"):
@@ -1338,10 +1336,8 @@ class ConsoleMaster(controller.Master):
             self.process_flow(f, r)
 
     def handle_response(self, r):
-        f = self.state.add_response(r)
-        if not f:
-            r.ack()
-        else:
+        f = flow.FlowMaster.handle_response(self, r)
+        if f:
             if f.match(self.stickycookie):
                 hid = (f.request.host, f.request.port)
                 if f.response.headers.has_key("set-cookie"):

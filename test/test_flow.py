@@ -1,3 +1,4 @@
+from cStringIO import StringIO
 from libmproxy import console, proxy, filt, flow
 import utils
 import libpry
@@ -25,10 +26,6 @@ class uFlow(libpry.AutoTree):
         f.response = utils.tresp()
         f.request = f.response.request
         assert not f.match(filt.parse("~b test"))
-
-    def test_dump(self):
-        f = utils.tflow()
-        assert f.dump()
 
     def test_backup(self):
         f = utils.tflow()
@@ -236,9 +233,10 @@ class uState(libpry.AutoTree):
         self._add_response(c)
         self._add_error(c)
 
-        dump = c.dump_flows()
+        flows = c.view[:]
         c.clear()
-        c.load_flows(dump)
+        
+        c.load_flows(flows)
         assert isinstance(c.flow_list[0], flow.Flow)
 
     def test_accept_all(self):
@@ -249,8 +247,42 @@ class uState(libpry.AutoTree):
         c.accept_all()
 
 
+class uSerialize(libpry.AutoTree):
+    def test_roundtrip(self):
+        sio = StringIO()
+        f = utils.tflow()
+        w = flow.FlowWriter(sio)
+        w.add(f)
+
+        sio.seek(0)
+        r = flow.FlowReader(sio)
+        l = list(r.stream())
+        assert len(l) == 1
+        assert l[0] == f
+
+
+class uFlowMaster(libpry.AutoTree):
+    def test_one(self):
+        s = flow.State()
+        f = flow.FlowMaster(None, s)
+
+        req = utils.treq()
+        f.handle_clientconnection(req.client_conn)
+        assert len(s.flow_list) == 1
+        f.handle_request(req)
+        assert len(s.flow_list) == 1
+        f.handle_request(req)
+        resp = utils.tresp()
+        resp.request = req
+        f.handle_response(resp)
+        assert len(s.flow_list) == 1
+        
+
 
 tests = [
     uFlow(),
     uState(),
+    uSerialize(),
+    uFlowMaster()
+
 ]

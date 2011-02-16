@@ -5,7 +5,7 @@
 
     Development started from Neil Schemenauer's munchy.py
 """
-import sys, os, time, string, socket, urlparse, re, select, copy
+import sys, os, time, string, socket, urlparse, re, select, copy, base64
 import SocketServer, ssl
 import utils, controller
 
@@ -64,7 +64,7 @@ def read_http_body(rfile, connection, headers, all):
         content = rfile.read()
         connection.close = True
     else:
-        content = None
+        content = ""
     return content
 
 
@@ -147,7 +147,7 @@ class Request(controller.Msg):
             method = self.method,
             path = self.path,
             headers = self.headers.get_state(),
-            content = self.content,
+            content = base64.encodestring(self.content),
             timestamp = self.timestamp,
         )
 
@@ -161,7 +161,7 @@ class Request(controller.Msg):
             state["method"],
             state["path"],
             utils.Headers.from_state(state["headers"]),
-            state["content"],
+            base64.decodestring(state["content"]),
             state["timestamp"]
         )
 
@@ -242,7 +242,7 @@ class Response(controller.Msg):
             msg = self.msg,
             headers = self.headers.get_state(),
             timestamp = self.timestamp,
-            content = self.content
+            content = base64.encodestring(self.content)
         )
 
     @classmethod
@@ -252,7 +252,7 @@ class Response(controller.Msg):
             state["code"],
             state["msg"],
             utils.Headers.from_state(state["headers"]),
-            state["content"],
+            base64.decodestring(state["content"]),
             state["timestamp"],
         )
 
@@ -307,7 +307,7 @@ class ClientConnection(controller.Msg):
         controller.Msg.__init__(self)
 
     def get_state(self):
-        return self.address
+        return list(self.address) if self.address else None
 
     @classmethod
     def from_state(klass, state):
@@ -433,7 +433,7 @@ class ServerConnection:
         if code >= 100 and code <= 199:
             return self.read_response()
         if self.request.method == "HEAD" or code == 204 or code == 304:
-            content = None
+            content = ""
         else:
             content = read_http_body(self.rfile, self, headers, True)
         return Response(self.request, code, msg, headers, content)
@@ -457,6 +457,7 @@ class ProxyHandler(SocketServer.StreamRequestHandler):
         cc.send(self.mqueue)
         while not cc.close:
             self.handle_request(cc)
+            cc = cc.copy()
         self.finish()
 
     def handle_request(self, cc):
@@ -470,6 +471,7 @@ class ProxyHandler(SocketServer.StreamRequestHandler):
             if request is None:
                 cc.close = True
                 return
+
             if request.is_response():
                 response = request
                 request = False

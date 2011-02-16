@@ -2,9 +2,9 @@
     This module provides more sophisticated flow tracking. These match requests
     with their responses, and provide filtering and interception facilities.
 """
-import subprocess, base64, sys
-from contrib import bson
-import proxy, threading
+import subprocess, base64, sys, json
+import proxy, threading, netstring
+import controller
 
 class RunException(Exception):
     def __init__(self, msg, returncode, errout):
@@ -22,6 +22,7 @@ class ReplayThread(threading.Thread):
     def run(self):
         try:
             server = proxy.ServerConnection(self.flow.request)
+            server.send_request(self.flow.request)
             response = server.read_response()
             response.send(self.masterq)
         except proxy.ProxyError, v:
@@ -39,15 +40,12 @@ class Flow:
 
     def script_serialize(self):
         data = self.get_state()
-        data = bson.dumps(data)
-        return base64.encodestring(data)
+        return json.dumps(data)
 
     @classmethod
     def script_deserialize(klass, data):
         try:
-            data = base64.decodestring(data)
-            data = bson.loads(data)
-        # bson.loads doesn't define a particular exception on error...
+            data = json.loads(data)
         except Exception:
             return None
         return klass.from_state(data)
@@ -85,12 +83,6 @@ class Flow:
                     se
                 )
         return f, se
-
-    def dump(self):
-        data = dict(
-                flows = [self.get_state()]
-               )
-        return bson.dumps(data)
 
     def get_state(self, nobackup=False):
         d = dict(
@@ -191,7 +183,8 @@ class State:
         """
         f = self.flow_map.get(req.client_conn)
         if not f:
-            return False
+            f = Flow(req.client_conn)
+            self.add_browserconnect(f)
         f.request = req
         return f
 
@@ -216,17 +209,9 @@ class State:
         f.error = err
         return f
 
-    def dump_flows(self):
-        data = dict(
-                flows =[i.get_state() for i in self.view]
-               )
-        return bson.dumps(data)
-
-    def load_flows(self, js):
-        data = bson.loads(js)
-        data = [Flow.from_state(i) for i in data["flows"]]
-        self.flow_list.extend(data)
-        for i in data:
+    def load_flows(self, flows):
+        self.flow_list.extend(flows)
+        for i in flows:
             self.flow_map[i.client_conn] = i
 
     def set_limit(self, limit):
@@ -302,3 +287,60 @@ class State:
             rt = ReplayThread(f, masterq)
             rt.start()
         #end nocover
+
+
+class FlowMaster(controller.Master):
+    def __init__(self, server, state):
+        controller.Master.__init__(self, server)
+        self.state = state
+
+    # Handlers
+    def handle_clientconnection(self, r):
+        f = Flow(r)
+        self.state.add_browserconnect(f)
+        r.ack()
+        return f
+
+    def handle_error(self, r):
+        f = self.state.add_error(r)
+        if not f:
+            r.ack()
+        return f
+
+    def handle_request(self, r):
+        f = self.state.add_request(r)
+        if not f:
+            r.ack()
+        return f
+
+    def handle_response(self, r):
+        f = self.state.add_response(r)
+        if not f:
+            r.ack()
+        return f
+
+
+class FlowWriter:
+    def __init__(self, fo):
+        self.fo = fo
+        self.ns = netstring.FileEncoder(fo)
+
+    def add(self, flow):
+        d = flow.get_state()
+        s = json.dumps(d)
+        self.ns.write(s)
+
+
+class FlowReader:
+    def __init__(self, fo):
+        self.fo = fo
+        self.ns = netstring.decode_file(fo)
+
+    def stream(self):
+        """
+            Yields Flow objects from the dump.
+        """
+        for i in self.ns:
+            data = json.loads(i)
+            yield Flow.from_state(data)
+
