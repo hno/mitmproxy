@@ -67,7 +67,7 @@ def findPackages(path, dataExclude=[]):
 
 
 
-long_description = file("README").read()
+long_description = file("README.mkd").read()
 packages, package_data = findPackages("libmproxy")
 setup(
         name = "mitmproxy",
