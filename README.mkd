@@ -7,6 +7,10 @@ the noninteractive mitmrecord program.
 
 To play back a recorded session use the mitmplayback program.
 
+These partially overlaps with mitmdump & playback functionality of later
+mitmproxy releases and have been dropped from upstream. Time permitting
+I will try to sync up with upstream again to see what is missing.
+
 Original README follows:
 
 __mitmproxy__ is an interactive SSL-capable intercepting HTTP proxy. It lets
